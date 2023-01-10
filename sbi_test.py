@@ -6,7 +6,6 @@ from sbi.inference import SNPE, prepare_for_sbi, simulate_for_sbi, SNLE
 import numpy as np
 import moments
 from matplotlib import pyplot as plt
-import dill
 import os
 import seaborn as sns
 
