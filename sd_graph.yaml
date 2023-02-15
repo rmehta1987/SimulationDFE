@@ -1,0 +1,64 @@
+description: Ipsita Mutation Saturation Demographic One Population
+time_units: years
+generation_time: 25
+doi: [10.1371/journal.pgen.1000695]
+demes:
+- name: Schiffels_Durbin
+  epochs:
+  - {end_time: 55940, start_size: 14448}
+  - {end_time: 51395, start_size: 14068}
+  - {end_time: 47457, start_size: 14068}
+  - {end_time: 43984, start_size: 14464}
+  - {end_time: 40877, start_size: 14464}
+  - {end_time: 38067, start_size: 15208}
+  - {end_time: 35501, start_size: 15208}
+  - {end_time: 33141, start_size: 16256}
+  - {end_time: 30956, start_size: 16256}
+  - {end_time: 28922, start_size: 17618}
+  - {end_time: 27018, start_size: 17618}
+  - {end_time: 25231, start_size: 19347}
+  - {end_time: 23545, start_size: 19347}
+  - {end_time: 21951, start_size: 21534}
+  - {end_time: 20439, start_size: 21534}
+  - {end_time: 19000, start_size: 24236}
+  - {end_time: 17628, start_size: 24236}
+  - {end_time: 16318, start_size: 27367}
+  - {end_time: 15063, start_size: 27367}
+  - {end_time: 13859, start_size: 30416}
+  - {end_time: 12702, start_size: 30416}
+  - {end_time: 11590, start_size: 32060}
+  - {end_time: 10517, start_size: 32060}
+  - {end_time: 9482, start_size: 31284}
+  - {end_time: 8483, start_size: 29404}
+  - {end_time: 7516, start_size: 26686}
+  - {end_time: 6580, start_size: 23261}
+  - {end_time: 5672, start_size: 18990}
+  - {end_time: 5520, start_size: 16490}
+  - {end_time: 5156, start_size: 16490}
+  - {end_time: 4817, start_size: 12958}
+  - {end_time: 4500, start_size: 12958}
+  - {end_time: 4203, start_size: 9827}
+  - {end_time: 3922, start_size: 9827}
+  - {end_time: 3656, start_size: 7477}
+  - {end_time: 3404, start_size: 7477}
+  - {end_time: 3165, start_size: 5791}
+  - {end_time: 2936, start_size: 5791}
+  - {end_time: 2718, start_size: 4670}
+  - {end_time: 2509, start_size: 4670}
+  - {end_time: 2308, start_size: 3841}
+  - {end_time: 2116, start_size: 3841}
+  - {end_time: 1930, start_size: 3372}
+  - {end_time: 1752, start_size: 3372}
+  - {end_time: 1579, start_size: 3287}
+  - {end_time: 1413, start_size: 3359}
+  - {end_time: 1252, start_size: 3570}
+  - {end_time: 1096, start_size: 4095}
+  - {end_time: 945, start_size: 4713}
+  - {end_time: 798, start_size: 5661}
+  - {end_time: 656, start_size: 7540}
+  - {end_time: 517, start_size: 11375}
+  - {end_time: 383, start_size: 14310}
+  - {end_time: 252, start_size: 13292}
+  - {end_time: 124, start_size: 14522}
+  - {end_time: 50, start_size: 613285}
+  - {end_time: 0, start_size: 613285}

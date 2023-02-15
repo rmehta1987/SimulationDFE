@@ -170,3 +170,6 @@ ClusterData/
 testing_moments/
 .vscode/
 *.pkl
+sfs_missense_sim_data.npy
+sfs_sims_missense_avg_rate/
+ParallelPopGen_Data/
