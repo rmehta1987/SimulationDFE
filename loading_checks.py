@@ -50,22 +50,29 @@ class SummaryNet(nn.Module):
         x=self.model(x)
         return x
     
+saved_path='saved_posteriors_nfe_infer_missense_selection_1_2023-02-22_13-56'
+obs20 = torch.load(f'Experiments/{saved_path}/posterior_observed_round_20.pkl')
+obs15 = torch.load(f'Experiments/{saved_path}/posterior_observed_round_15.pkl')
+obs10 = torch.load(f'Experiments/{saved_path}/posterior_observed_round_10.pkl') 
+obs5 = torch.load(f'Experiments/{saved_path}/posterior_observed_round_5.pkl')
+obs0 = torch.load(f'Experiments/{saved_path}/posterior_observed_round_0.pkl')
 
-obs = torch.load('/home/rahul/PopGen/SimulationSFS/Experiments/saved_posteriors_nfe_infer_missense_selection_1_2023-02-22_11-38/posterior_observed_round_10.pkl')
-obs1 = torch.load('/home/rahul/PopGen/SimulationSFS/Experiments/saved_posteriors_nfe_infer_missense_selection_1_2023-02-22_11-38/posterior_observed_round_5.pkl')
-obs0 = torch.load('/home/rahul/PopGen/SimulationSFS/Experiments/saved_posteriors_nfe_infer_missense_selection_1_2023-02-22_11-38/posterior_observed_round_0.pkl')
-
-sampleobs = obs.sample((100000,))
-sampleobs1 = obs1.sample((100000,))
+sampleobs20 = obs20.sample((100000,))
+sampleobs15 = obs15.sample((100000,))
+sampleobs10 = obs10.sample((100000,))
+sampleobs5 = obs5.sample((100000,))
 sampleobs0 = obs0.sample((100000,))
 bins = [0, 10e-5, 10e-4, 10e-3, 10e-2, 10e-1]
 
-temp = -1*torch.cat((sampleobs, sampleobs1, sampleobs0),dim=1)
+temp = -1*torch.cat((sampleobs20, sampleobs15, sampleobs10, sampleobs5, sampleobs0),dim=1)
 temp2 = torch.log10(torch.abs(temp.squeeze()))
 print(temp.shape)
-df = pd.DataFrame(temp.cpu().numpy(), columns=['Training Round 10', 'Training Round 1', 'Initial Proposal'])
-df2 = pd.DataFrame(temp2.cpu().numpy(), columns=['Training Round 10', 'Training Round 1', 'Initial Proposal'])
-sns.kdeplot(df, label=['Training Round 10', 'Training Round 1', 'Initial Proposal'])
+thecolumns = ['Training Round {}'.format(i*5) for i in range(0,temp.shape[1])]
+thecolumns.reverse()
+print(thecolumns)
+df = pd.DataFrame(temp.cpu().numpy(), columns=thecolumns)
+df2 = pd.DataFrame(temp2.cpu().numpy(), columns=thecolumns)
+sns.kdeplot(df, label=thecolumns)
 #plt.legend(['Learned Prior', 'Proposal'])
 #plt.legend()
 plt.xlabel('Unscaled Selection (s)')
@@ -88,7 +95,7 @@ plt.tight_layout()
 plt.savefig('para_lof_hist2.png')
 plt.close()
 
-sns.kdeplot(df2, label=['Training Round 10', 'Training Round 1', 'Initial Proposal'])
+sns.kdeplot(df2, label=thecolumns)
 #plt.legend(['Learned Prior', 'Proposal'])
 #plt.legend()
 plt.xlabel('Unscaled Selection (s)')
@@ -101,12 +108,12 @@ plt.close()
 the_device='cuda:0'
 
 box_uniform_prior = utils.BoxUniform(low=-0.015 * torch.ones(1, device=the_device), high=-1e-8*torch.ones(1,device=the_device),device=the_device)
-accept_reject_fn = get_density_thresholder(obs, quantile=1e-6)
-proposal = RestrictedPrior(box_uniform_prior, accept_reject_fn, obs, sample_with="sir", device=the_device)
+accept_reject_fn = get_density_thresholder(obs20, quantile=1e-6)
+proposal = RestrictedPrior(box_uniform_prior, accept_reject_fn, obs20, sample_with="sir", device=the_device)
 
 dfe = proposal.sample((100000,))
-temp3 = -1*torch.cat((sampleobs, dfe),dim=1)
-df3 = pd.DataFrame(temp3.cpu().numpy(), columns=['Restricted prior', 'Training Round 10'])
-sns.kdeplot(df3, label=['Restricted Round 10', 'Training Round 10'])
+temp3 = -1*torch.cat((sampleobs20, dfe),dim=1)
+df3 = pd.DataFrame(temp3.cpu().numpy(), columns=['Restricted prior', 'Training Round 20'])
+sns.kdeplot(df3, label=['Restricted Round 20', 'Training Round 20'])
 
 plt.savefig('para_dfe.png')
