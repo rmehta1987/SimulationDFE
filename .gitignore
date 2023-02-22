@@ -173,3 +173,5 @@ testing_moments/
 sfs_missense_sim_data.npy
 sfs_sims_missense_avg_rate/
 ParallelPopGen_Data/
+sfs_lof_sim_data.npy
+.log/
