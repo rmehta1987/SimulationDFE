@@ -61,10 +61,12 @@ def create_hdf5_dataset(data_path: str, file_name: str):
 def main():
 
     missense_data_path = '/home/rahul/PopGen/SimulationSFS/ParallelPopGen_Data/sfs_sims_missense_avg_rate/'
-    lof_data_path = '/home/rahul/PopGen/SimulationSFS/ParallelPopGen_Data/sfs_sims_lof_avg_rate/'
+    #lof_data_path = '/home/rahul/PopGen/SimulationSFS/ParallelPopGen_Data/sfs_sims_lof_avg_rate/'
+    lof_data_path2 = '/home/rahul/PopGen/SimulationSFS/cur_data_made_02_22/'
+
     lof_data = 'sfs_lof_sim_data.npy'
-    file_name = 'sfs_lof_hdf5_test_data.h5'
-    create_hdf5_dataset(lof_data_path, file_name)
+    file_name = 'sfs_lof_hdf5_data.h5'
+    create_hdf5_dataset(lof_data_path2, file_name)
 
 
 if __name__ == "__main__":
