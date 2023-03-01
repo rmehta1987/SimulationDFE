@@ -79,7 +79,39 @@ class SummaryNet5(nn.Module):
         
         x=self.model(x)
         return x
+    
+class SummaryNet5(nn.Module):
+    # in_features * out_features <= 10**8:
+    def __init__(self, sample_size):
+        super().__init__()
+        self.sample_size = sample_size
+        self.linear4 = sl.SparseLinear(int(self.sample_size), int(self.sample_size / 125), dynamic=True) # 893.68
+        self.bn4 = nn.LayerNorm(int(self.sample_size / 125))
+        self.linear5 = sl.SparseLinear(int(self.sample_size / 125), int(self.sample_size / 175), dynamic=True) # 638.34
+        self.bn5 = nn.LayerNorm(int(self.sample_size / 175))
+        self.linear6 = sl.SparseLinear(int(self.sample_size / 175), int(self.sample_size / 200), dynamic=True) # 585.5
+        self.bn6 = nn.LayerNorm(int(self.sample_size / 200))
+        self.linear7 = sl.SparseLinear(int(self.sample_size / 200), int(self.sample_size / 400), dynamic=True) # 279.5
+        self.bn7 = nn.LayerNorm(int(self.sample_size / 400))
+        self.linear8 = sl.SparseLinear(int(self.sample_size / 400), int(self.sample_size / 400), dynamic=True) # 279.25
+
+
+        self.model = nn.Sequential(self.linear4, self.bn4, nn.SiLU(inplace=True),
+                                   self.linear5, self.bn5, nn.SiLU(inplace=True),
+                                   self.linear6, self.bn6, nn.SiLU(inplace=True),
+                                   self.linear7, self.bn7, nn.SiLU(inplace=True),
+                                   self.linear8,)
+                                   
+                                   
+
+    def forward(self, x):
+        
+        x=self.model(x)
+        return x
+
+
 the_device='cuda:0'
+
 
 proposal = utils.BoxUniform(low=-0.015 * torch.ones(1, device=the_device), high=-1e-8*torch.ones(1,device=the_device),device=the_device)
 
