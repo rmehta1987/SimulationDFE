@@ -1,0 +1,4 @@
+  File "posterior_parallelpopgensim_ac_nfe_missense_sparse.py", line 252
+    self.linear5)) 
+                 ^
+SyntaxError: unmatched ')'

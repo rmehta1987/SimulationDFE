@@ -245,13 +245,11 @@ class SummaryNet(nn.Module):
         super().__init__()
         self.sample_size = sample_size # For monarch this needs to be divisible by the block size
         self.block_size = block_sizes
-        self.linear4 = MonarchLinear(sample_size, int(sample_size / 10), nblocks=self.block_size[0]) # 11171
-        self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 50) , nblocks=self.block_size[1]) # 2234.2
-        self.linear6 = MonarchLinear(int(self.sample_size / 50), int(self.sample_size / 100), nblocks=self.block_size[2]) # 1117.1
-
+        self.linear4 = MonarchLinear(sample_size, self.sample_size, nblocks=self.block_size[0]) # 11171
+        self.linear5 = MonarchLinear(self.sample_size, self.sample_size, nblocks=self.block_size[0]) 
+        
         self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.SiLU(inplace=True),
-                                   self.linear5, nn.Dropout(dropout_rate), nn.SiLU(inplace=True),
-                                   self.linear6) 
+                                   self.linear5) 
     def forward(self, x):
         
         x=self.model(x)
@@ -269,7 +267,7 @@ def main(argv):
     set_reproducable_seed(FLAGS.seed)
     
     # sets up cached simulated data to read from hdf5 file
-    get_sim_datafrom_hdf5('sfs_lof_hdf5_data.h5')
+    get_sim_datafrom_hdf5('sfs_missense_hdf5_data.h5')
     
 
     box_uniform_prior = utils.BoxUniform(low=-0.990 * torch.ones(1, device=the_device), high=-1e-8*torch.ones(1,device=the_device),device=the_device)
@@ -281,7 +279,7 @@ def main(argv):
 
     print("Creating embedding network")
    
-    embedding_net = SummaryNet(sample_size*2-1, [64, 64, 16]).to(the_device)
+    embedding_net = SummaryNet(sample_size*2-1, [32, 32, 16]).to(the_device)
     
     print("Finished creating embedding network")
     # First learn posterior
@@ -297,14 +295,14 @@ def main(argv):
 
     
     #true_sqldata_to_numpy('emperical_lof_variant_sfs.csv', 'emperical_lof_sfs_nfe.npy')
-    true_x = load_true_data('emperical_lof_sfs_nfe.npy', 0)
+    true_x = load_true_data('emperical_missense_sfs_ac_nfe.npy', 0)
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
     #Set path for experiments
     #true_x = torch.cat([true_x, torch.tensor(0.0, device=the_device).unsqueeze(-1)]) # need an even shape
 
     un_learned_prob = [None]*rounds
 
-    path = "Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
+    path = "Experiments/saved_posteriors_nfe_infer_missense_selection_monarch_{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
     if not (os.path.isdir(path)):
         try:
             os.mkdir(path)
@@ -350,12 +348,12 @@ def main(argv):
         #posterior_build.evaluate(quality_control_metric= "psis", N=60)
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_pop()
-        if i >= 5 and i%5 == 0:
+        #if i >= 5 and i%5 == 0:
             #torch.cuda.nvtx.range_push("threshold iteration{}".format(i))
-            reporter = MemReporter()
-            with open(f'summary_memory_{i}.txt', 'w') as f:
-                with redirect_stdout(f):
-                    reporter.report()
+            #reporter = MemReporter()
+            #with open(f'summary_memory_{i}.txt', 'w') as f:
+            #    with redirect_stdout(f):
+            #        reporter.report()
 
         accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-5)
         proposal = RestrictedPrior(prior, accept_reject_fn, posterior_build, sample_with="sir", device=the_device)
@@ -434,7 +432,7 @@ def main(argv):
     with open("inference.pkl", "wb") as handle:
         pickle.dump(infer_posterior, handle)
 
-    np.save('un_learned_proposals_lof_2', un_learned_prob, allow_pickle=True)
+    np.save('un_learned_proposals_missense', un_learned_prob, allow_pickle=True)
 
 
 if __name__ == '__main__':
