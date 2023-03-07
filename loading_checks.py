@@ -144,7 +144,11 @@ the_device='cuda:0'
 
 prior = utils.BoxUniform(low=-0.990 * torch.ones(1, device=the_device), high=-1e-8*torch.ones(1,device=the_device),device=the_device)
 
+<<<<<<< HEAD
 saved_path='Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_nsf2023-03-03_10-54'
+=======
+saved_path='Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_2023-03-02_16-13'
+>>>>>>> ac2f2b59b768f39e83354a654187c76246795947
 
 lsdirs = os.listdir(saved_path)
 obs_dict = dict()

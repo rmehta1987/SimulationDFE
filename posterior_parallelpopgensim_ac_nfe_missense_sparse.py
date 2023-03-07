@@ -46,7 +46,7 @@ logging.getLogger('matplotlib').setLevel(logging.ERROR) # See: https://github.co
 # Integer Flags
 flags.DEFINE_integer('sample_size', 55855, 'Diploid Population Sample Size where N is the number of diploids') # should be 55855
 flags.DEFINE_integer('num_hidden',256, "Number of hidden layers in normalizing flow architecture")
-flags.DEFINE_integer('num_sim', 50, 'How many simulations to run')
+flags.DEFINE_integer('num_sim', 100, 'How many simulations to run')
 flags.DEFINE_integer('rounds', 100, 'How many round of simulations to run, (total simulations = num_sim*rounds')
 flags.DEFINE_integer('seed', 10, 'A seed to set for reproducability')
 flags.DEFINE_integer('number_of_transforms', 3, "How many normalizing flow blocks to use")
@@ -202,207 +202,6 @@ def load_true_data(a_path: str, type: int) -> torch.float32:
     return sfs 
 
 
-class SummaryNet(nn.Module):
-    def __init__(self, sample_size):
-        super().__init__()
-        self.sample_size = sample_size
-        self.linear1 = sl.SparseLinear(self.sample_size, int(self.sample_size / 200)) # 585
-        self.bn1 = nn.LazyBatchNorm1d(int(self.sample_size / 200))
-        self.linear2 = sl.SparseLinear(int(self.sample_size / 200), int(self.sample_size / 200)) # 585
-        self.linear3 = sl.SparseLinear(int(self.sample_size / 200), int(self.sample_size / 400)) # 283
-        self.bn2 = nn.LazyBatchNorm1d(int(self.sample_size / 400))
-        self.linear4 = sl.SparseLinear(int(self.sample_size / 400), int(self.sample_size / 600)) # 195
-        self.bn3 = nn.LazyBatchNorm1d(int(self.sample_size / 600))
-        self.linear5 = sl.SparseLinear(int(self.sample_size / 600), int(self.sample_size / 600)) # 195
-
-        self.model = nn.Sequential(self.linear1, self.bn1, nn.SiLU(), self.linear2, nn.SiLU(), self.linear3, self.bn2, nn.SiLU(), self.linear4, self.bn3, nn.SiLU(), self.linear5)
-
-    def forward(self, x):
-        
-        x=self.model(x)
-        return x
-
-
-class SummaryNet2(nn.Module):
-    def __init__(self, sample_size):
-        super().__init__()
-        self.sample_size = sample_size
-        self.linear1 = nn.Linear(self.sample_size, int(self.sample_size / 400)) # 283
-        self.linear2 = nn.Linear(int(self.sample_size / 400), int(self.sample_size / 400)) # 283
-        self.linear3 = nn.Linear(int(self.sample_size / 400), int(self.sample_size / 600)) # 188
-        self.linear4 = nn.Linear(int(self.sample_size / 600), int(self.sample_size / 800)) # 141
-        self.linear5 = nn.Linear(int(self.sample_size / 800), int(self.sample_size / 1200)) # 94
-
-        self.model = nn.Sequential(self.linear1, nn.SiLU(), self.linear2, nn.SiLU(), self.linear3, nn.SiLU(), self.linear4, nn.SiLU(), self.linear5)
-
-    def forward(self, x):
-        
-        x=self.model(x)
-        return x
-
-class SummaryNet3(nn.Module):
-    #needs dimensions to be divisible by 32 :/
-    def __init__(self, sample_size):
-        super().__init__()
-        self.sample_size = sample_size
-        self.linear1 = BlockSparseLinear(self.sample_size, int(self.sample_size / 200)) # 585
-        self.bn1 = nn.BatchNorm1d(int(self.sample_size / 200))
-        self.linear2 = BlockSparseLinear(int(self.sample_size / 200), int(self.sample_size / 200)) # 585
-        self.linear3 = BlockSparseLinear(int(self.sample_size / 200), int(self.sample_size / 400)) # 283
-        self.bn2 = nn.BatchNorm1d(int(self.sample_size / 400))
-        self.linear4 = BlockSparseLinear(int(self.sample_size / 400), int(self.sample_size / 600)) # 195
-        self.bn3 = nn.BatchNorm1d(int(self.sample_size / 600))
-        self.linear5 = BlockSparseLinear(int(self.sample_size / 600), int(self.sample_size / 600)) # 195
-
-        self.model = nn.Sequential(self.linear1, self.bn1, nn.SiLU(), self.linear2, nn.SiLU(), self.linear3, self.bn2, nn.SiLU(), self.linear4, self.bn3, nn.SiLU(), self.linear5)
-
-    def forward(self, x):
-        
-        x=self.model(x)
-        return x
-
-class SummaryNet4(nn.Module):
-    def __init__(self, sample_size):
-        super().__init__()
-        self.sample_size = sample_size
-        self.linear1 = sl.SparseLinear(self.sample_size, int(self.sample_size / 2), dynamic=True) # 58500
-        self.bn1 = nn.Layernorm(int(self.sample_size / 2))
-        self.linear2 = sl.SparseLinear(int(self.sample_size / 2), int(self.sample_size / 4)) # 27925
-        self.bn2 = nn.Layernorm(int(self.sample_size / 4))
-        self.linear3 = sl.SparseLinear(int(self.sample_size / 4), int(self.sample_size / 10)) # 11170
-        self.bn3 = nn.Layernorm(int(self.sample_size / 10))
-        self.linear4 = sl.SparseLinear(int(self.sample_size / 10), int(self.sample_size / 20)) # 5585
-        self.bn4 = nn.Layernorm(int(self.sample_size / 20))
-        self.linear5 = sl.SparseLinear(int(self.sample_size / 20), int(self.sample_size / 50), dynamic=True) # 2234
-        self.bn5 = nn.LayerNorm(int(self.sample_size / 50))
-        self.linear6 = sl.SparseLinear(int(self.sample_size / 50), int(self.sample_size / 100)) # 1117
-        self.bn6 = nn.LayerNorm(int(self.sample_size / 100))
-        self.linear7 = sl.SparseLinear(int(self.sample_size / 100), int(self.sample_size / 200)) # 558.5
-        self.bn7 = nn.LayerNorm(int(self.sample_size / 200))
-        self.linear8 = sl.SparseLinear(int(self.sample_size / 200), int(self.sample_size / 400)) # 279.25
-        self.bn8 = nn.LayerNorm(int(self.sample_size / 400))
-        self.linear9 = sl.SparseLinear(int(self.sample_size / 400), int(self.sample_size / 400), dynamic=True) # 279.25
-
-        self.model = nn.Sequential(self.linear1, self.bn1, asy.ActivationSparsity(), self.linear2, self.bn2, asy.ActivationSparsity(), self.linear3, self.bn3, asy.ActivationSparsity(), 
-                                   self.linear4, self.bn4, asy.ActivationSparsity(), 
-                                   self.linear5, self.bn5, asy.ActivationSparsity(),
-                                   self.linear6, self.bn6, asy.ActivationSparsity(),
-                                   self.linear7, self.bn7, asy.ActivationSparsity(),
-                                   self.linear8, self.bn8, asy.ActivationSparsity(),
-                                   self.linear9, self.bn9, asy.ActivationSparsity(),)
-                                   
-                                   
-
-    def forward(self, x):
-        
-        x=self.model(x)
-        return x
-
-class SummaryNet5(nn.Module):
-    # in_features * out_features <= 10**8:
-    def __init__(self, sample_size):
-        super().__init__()
-        self.sample_size = sample_size
-        self.linear4 = sl.SparseLinear(int(self.sample_size), int(self.sample_size / 125), dynamic=True) # 893.68
-        self.bn4 = nn.LayerNorm(int(self.sample_size / 125))
-        self.linear5 = sl.SparseLinear(int(self.sample_size / 125), int(self.sample_size / 175), dynamic=True) # 638.34
-        self.bn5 = nn.LayerNorm(int(self.sample_size / 175))
-        self.linear6 = sl.SparseLinear(int(self.sample_size / 175), int(self.sample_size / 200), dynamic=True) # 585.5
-        self.bn6 = nn.LayerNorm(int(self.sample_size / 200))
-        self.linear7 = sl.SparseLinear(int(self.sample_size / 200), int(self.sample_size / 400), dynamic=True) # 279.5
-        self.bn7 = nn.LayerNorm(int(self.sample_size / 400))
-        self.linear8 = sl.SparseLinear(int(self.sample_size / 400), int(self.sample_size / 400), dynamic=True) # 279.25
-
-
-        self.model = nn.Sequential(self.linear4, self.bn4, asy.ActivationSparsity(),
-                                   self.linear5, self.bn5, asy.ActivationSparsity(),
-                                   self.linear6, self.bn6, asy.ActivationSparsity(),
-                                   self.linear7, self.bn7, asy.ActivationSparsity(),
-                                   self.linear8,)
-                                   
-                                   
-
-    def forward(self, x):
-        
-        x=self.model(x)
-        return x
-
-class SummaryNet6(nn.Module):
-    # in_features * out_features <= 10**8:
-    def __init__(self, sample_size):
-        super().__init__()
-        self.sample_size = sample_size
-        self.linear4 = nvsl(int(self.sample_size), int(self.sample_size / 100)) # 1117
-        self.bn4 = nn.LayerNorm(int(self.sample_size / 100))
-        self.linear5 = nvsl(int(self.sample_size), int(self.sample_size / 100)) # 1117
-        #self.linear5 = nvsl(int(self.sample_size / 100), int(self.sample_size / 100)) # 650
-        #self.bn5 = nn.LayerNorm(int(self.sample_size / 180))
-        #self.linear6 = nvsl(int(self.sample_size / 180), int(self.sample_size / 225)) # 520
-        #self.bn6 = nn.LayerNorm(int(self.sample_size / 225))
-        #self.linear7 = nvsl(int(self.sample_size / 225), int(self.sample_size / 300)) # 390
-        #self.bn7 = nn.LayerNorm(int(self.sample_size / 300))
-        #self.linear8 = nvsl(int(self.sample_size / 300), int(self.sample_size / 300)) # 279.25
-
-
-        self.model = nn.Sequential(self.linear4, self.bn4, nn.SiLU(inplace=True),
-                                   self.linear5,)
-                                   
-                                   
-
-    def forward(self, x):
-        
-        x=self.model(x)
-        return x
-
-class SummaryNet7(nn.Module):
-    # in_features * out_features <= 10**8:
-    def __init__(self, sample_size):
-        super().__init__()
-        self.sample_size = sample_size
-        self.linear4 = sl.SparseLinear(int(self.sample_size), int(self.sample_size / 125), dynamic=True) # 893.68
-        self.bn4 = nn.LayerNorm(int(self.sample_size / 125))
-        self.linear5 = sl.SparseLinear(int(self.sample_size / 125), int(self.sample_size / 175), dynamic=True) # 638.34
-        self.bn5 = nn.LayerNorm(int(self.sample_size / 175))
-        self.linear6 = sl.SparseLinear(int(self.sample_size / 175), int(self.sample_size / 200), dynamic=True) # 585.5
-        self.bn6 = nn.LayerNorm(int(self.sample_size / 200))
-        self.linear7 = sl.SparseLinear(int(self.sample_size / 200), int(self.sample_size / 400), dynamic=True) # 279.5
-        self.bn7 = nn.LayerNorm(int(self.sample_size / 400))
-        self.linear8 = sl.SparseLinear(int(self.sample_size / 400), int(self.sample_size / 400), dynamic=True) # 279.25
-
-
-        self.model = nn.Sequential(self.linear4, self.bn4, nn.SiLU(inplace=True),
-                                   self.linear5, self.bn5, nn.SiLU(inplace=True),
-                                   self.linear6, self.bn6, nn.SiLU(inplace=True),
-                                   self.linear7, self.bn7, nn.SiLU(inplace=True),
-                                   self.linear8,)
-                                   
-                                   
-
-    def forward(self, x):
-        
-        x=self.model(x)
-        return x
-
-class SummaryNet8(nn.Module):
-    def __init__(self, sample_size):
-        super().__init__()
-        self.sample_size = sample_size # For monarch this needs to be divisible by 2
-        self.linear4 = MonarchLinear(int(self.sample_size), int(self.sample_size / 125), dynamic=True) # 893.68
-        self.bn4 = nn.LayerNorm(int(self.sample_size / 125))
-        self.linear5 = sl.MonarchLinear(int(self.sample_size / 125), int(self.sample_size / 175), dynamic=True) # 638.34
-        self.bn5 = nn.LayerNorm(int(self.sample_size / 175))
-        self.linear6 = sl.MonarchLinear(int(self.sample_size / 175), int(self.sample_size / 200), dynamic=True) # 585.5
-        self.bn6 = nn.LayerNorm(int(self.sample_size / 200))
-        self.linear7 = sl.MonarchLinear(int(self.sample_size / 200), int(self.sample_size / 400), dynamic=True) # 279.5
-        self.bn7 = nn.LayerNorm(int(self.sample_size / 400))
-        self.linear8 = sl.MonarchLinear(int(self.sample_size / 400), int(self.sample_size / 400), dynamic=True) # 279.25
-
-
-        self.model = nn.Sequential(self.linear4, self.bn4, nn.SiLU(inplace=True),
-                                   self.linear5, self.bn5, nn.SiLU(inplace=True),
-                                   self.linear6, self.bn6, nn.SiLU(inplace=True),
-                                   self.linear7, self.bn7, nn.SiLU(inplace=True),
-                                   self.linear8,)
 
 
 @atexit.register
@@ -438,7 +237,7 @@ def main(argv):
 
     proposal = prior
 
-    get_sim_datafrom_hdf5('sfs_lof_hdf5_data.h5')
+    get_sim_datafrom_hdf5('sfs_missense_hdf5_data.h5')
     #true_sqldata_to_numpy('emperical_lof_variant_sfs.csv', 'emperical_lof_sfs_nfe.npy')
     true_x = load_true_data('emperical_lof_sfs_nfe.npy', 0)
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))

@@ -178,8 +178,14 @@ sfs_lof_sim_data.npy
 lof_sim_sfs_data/
 *.txt
 *.h5
+<<<<<<< HEAD
 *.gz
 missense_sim_sfs_data/
 Experiments/
 # Don't ignore custom modifications to sbi and other packages
 !SFS/lib/python3.10/site-packages/sbi/*
+=======
+
+# Don't ignore custom modifications to sbi and other packages
+!SFS/lib/python3.10/site-packages/sbi/*
+>>>>>>> ac2f2b59b768f39e83354a654187c76246795947
