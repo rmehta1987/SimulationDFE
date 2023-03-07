@@ -24,11 +24,7 @@ import torch.nn.functional as F
 import subprocess
 from sortedcontainers import SortedDict
 from scipy.spatial import KDTree
-<<<<<<< HEAD
 #from pytorch_block_sparse import BlockSparseLinear
-=======
-from pytorch_block_sparse import BlockSparseLinear
->>>>>>> ac2f2b59b768f39e83354a654187c76246795947
 from sparselinear import activationsparsity as asy
 from monarch_linear import MonarchLinear
 
@@ -47,7 +43,7 @@ logging.getLogger('matplotlib').setLevel(logging.ERROR) # See: https://github.co
 # Integer Flags
 flags.DEFINE_integer('sample_size', 55855, 'Diploid Population Sample Size where N is the number of diploids') # should be 55855
 flags.DEFINE_integer('num_hidden',256, "Number of hidden layers in normalizing flow architecture")
-flags.DEFINE_integer('num_sim', 50, 'How many simulations to run')
+flags.DEFINE_integer('num_sim', 200, 'How many simulations to run')
 flags.DEFINE_integer('rounds', 100, 'How many round of simulations to run, (total simulations = num_sim*rounds')
 flags.DEFINE_integer('seed', 10, 'A seed to set for reproducability')
 flags.DEFINE_integer('number_of_transforms', 3, "How many normalizing flow blocks to use")
@@ -295,12 +291,7 @@ def main(argv):
     infer_posterior = SNPE(prior, show_progress_bars=True, device=the_device, density_estimator=density_estimator_function)
 
     #posterior parameters
-<<<<<<< HEAD
-    vi_parameters = {"q": "nsf", "parameters": {"num_transforms": 3, "hidden_dims": 256}}
-
-=======
     vi_parameters = {"q": "maf", "parameters": {"num_transforms": 3, "hidden_dims": 256}}
->>>>>>> ac2f2b59b768f39e83354a654187c76246795947
 
     proposal = prior
 
@@ -355,13 +346,8 @@ def main(argv):
         print("Training to emperical observation")
         # This proposal is used for Varitaionl inference posteior
         posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=False)
-<<<<<<< HEAD
-        posterior_build.evaluate(quality_control_metric= "prop", N=60)
-        posterior_build.evaluate(quality_control_metric= "psis", N=60)
-=======
         #posterior_build.evaluate(quality_control_metric= "prop", N=60)
         #posterior_build.evaluate(quality_control_metric= "psis", N=60)
->>>>>>> ac2f2b59b768f39e83354a654187c76246795947
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_pop()
         if i >= 5 and i%5 == 0:
@@ -448,7 +434,7 @@ def main(argv):
     with open("inference.pkl", "wb") as handle:
         pickle.dump(infer_posterior, handle)
 
-    np.save('un_learned_proposals', un_learned_prob, allow_pickle=True)
+    np.save('un_learned_proposals_lof_2', un_learned_prob, allow_pickle=True)
 
 
 if __name__ == '__main__':

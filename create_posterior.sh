@@ -1,12 +1,12 @@
 #!/bin/bash
 
-#SBATCH --job-name=posterior
+#SBATCH --job-name=post2
 #SBATCH --account=pi-jjberg
 #SBATCH --partition=gpu
 #SBATCH --time=16:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --mem=16G
-#SBATCH --output=posterior.out
+#SBATCH --output=posterior2.out
 # TO USE V100 specify --constraint=v100
 # TO USE RTX600 specify --constraint=rtx6000
 #******SBATCH --constraint=v100   # constraint job runs on V100 GPU use
