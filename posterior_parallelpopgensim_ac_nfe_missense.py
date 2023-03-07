@@ -157,7 +157,7 @@ def true_sqldata_to_numpy(a_path: str):
     # Get the histogram
     sfs, bins = np.histogram(ac_count, bins=thebins)  
     assert sfs.shape[0]+1 == sample_size*2-1, "True Sample Size must be the same dimensions as the Site Frequency Spectrum for the true sample size, SFS shape: {} and sample shape: {}".format(sfs.shape[0], sample_size)
-    np.save('emperical_missense_sfs_nfe_ac_saved.pkl', sfs)
+    np.save('emperical_missense_sfs_nfe.pkl', sfs)
 
     print("Procssed and stored true data")
 
@@ -255,6 +255,7 @@ def main(argv):
     accept_reject_fns = []
 
     get_sim_data('/home/rahul/PopGen/SimulationSFS/sfs_missense_sim_data.npy')
+    true_sqldata_to_numpy('emperical_missense_variant_sfs.csv')
     true_x = load_true_data('/home/rahul/PopGen/SimulationSFS/wrong_sample_size_emperical_missense_sfs_nfe_ac_saved.pkl.npy', 0)
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
     #Set path for experiments
