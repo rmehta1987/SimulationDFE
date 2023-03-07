@@ -176,7 +176,8 @@ ParallelPopGen_Data/
 sfs_lof_sim_data.npy
 .log/
 lof_sim_sfs_data/
-summary*.txt
+.txt
+*.h5
 
 # Don't ignore custom modifications to sbi and other packages
 !SFS/lib/python3.10/site-packages/sbi/*
