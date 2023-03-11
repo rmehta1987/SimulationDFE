@@ -144,29 +144,30 @@ the_device='cuda:0'
 
 prior = utils.BoxUniform(low=-0.990 * torch.ones(1, device=the_device), high=-1e-8*torch.ones(1,device=the_device),device=the_device)
 
-<<<<<<< HEAD
-saved_path='Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_nsf2023-03-03_10-54'
-=======
-saved_path='Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_2023-03-02_16-13'
->>>>>>> ac2f2b59b768f39e83354a654187c76246795947
+
+saved_path='Experiments/Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_2023-03-07_13-24'
+
+
 
 lsdirs = os.listdir(saved_path)
 obs_dict = dict()
 post_dict = dict()
 
-for a_file in lsdirs:
+for i, a_file in enumerate(lsdirs):
     if 'observed' in a_file:
         round_num = int(re.search("\d+", a_file)[0])
         post_obs = torch.load(f'{saved_path}/{a_file}')
-        samples = post_obs.sample((100000,))
+        samples = post_obs.sample((100000,))/2.0
         obs_dict[round_num] = samples.cpu().squeeze().numpy()
-        del post_obs
+        if i < len(lsdirs)-1:
+            del post_obs
     else:
         round_num = int(re.search("\d+", a_file)[0])
         post = torch.load(f'{saved_path}/{a_file}')
-        samples = post.sample((100000,))
+        samples = post.sample((100000,))/2.0
         post_dict[round_num] = samples.cpu().squeeze().numpy()
-        del post
+        if i < len(lsdirs)-1:
+            del post
 
 #post_dict['intial'] = prior.sample((100000,)).cpu().squeeze().numpy()
 #obs_dict['intial'] = prior.sample((100000,)).cpu().squeeze().numpy()
@@ -185,7 +186,7 @@ plt.xlabel('Unscaled Selection (|s|)')
 plt.ylabel('Density')
 plt.title('Density Selection Coefficients Sampled from Inferred Distributions of round')
 plt.tight_layout()
-plt.savefig('para_lof_monarch_obs_30.png')
+plt.savefig('para_lof_monarch_obs_nsf_30.png')
 plt.close()
 
 
@@ -196,7 +197,7 @@ plt.xlabel('Unscaled Selection (log{|s|))')
 plt.ylabel('Density')
 plt.title('Density Selection Coefficients Sampled from Inferred Distributions of round')
 plt.tight_layout()
-plt.savefig('para_lof_monarch_obs_log_30.png')
+plt.savefig('para_lof_monarch_obs_log_nsf_30.png')
 plt.close()
 
 '''
@@ -233,21 +234,21 @@ plt.tight_layout()
 plt.savefig('para_lof_log_30.png')
 plt.close()
 '''
-obs90 = torch.load('/home/rahul/PopGen/SimulationSFS/Experiments/saved_posteriors_nfe_infer_lof_selection_nvsl_2023-03-02_07-27/posterior_observed_round_30.pkl')
-post90 = torch.load('/home/rahul/PopGen/SimulationSFS/Experiments/saved_posteriors_nfe_infer_lof_selection_nvsl_2023-03-02_07-27/posterior_round_30.pkl')
+#obs90 = torch.load('/home/rahul/PopGen/SimulationSFS/Experiments/saved_posteriors_nfe_infer_lof_selection_nvsl_2023-03-02_07-27/posterior_observed_round_30.pkl')
+#post90 = torch.load('/home/rahul/PopGen/SimulationSFS/Experiments/saved_posteriors_nfe_infer_lof_selection_nvsl_2023-03-02_07-27/posterior_round_30.pkl')
 
-accept_reject_fn = get_density_thresholder(obs90, quantile=1e-6)
-proposal = RestrictedPrior(prior, accept_reject_fn, post90, sample_with="sir", device=the_device)
+accept_reject_fn = get_density_thresholder(post_obs, quantile=1e-6)
+proposal = RestrictedPrior(prior, accept_reject_fn, post_obs, sample_with="sir", device=the_device)
 
-dfe = proposal.sample((100000,))
-temp3 = -1*torch.cat((dfe, post90.sample((100000,)), prior.sample((100000,))),dim=1)
+dfe = proposal.sample((100000,))/2.0
+temp3 = -1*torch.cat((dfe, post_obs.sample((100000,))/2.0, prior.sample((100000,))),dim=1)
 df3 = pd.DataFrame(temp3.cpu().numpy(), columns=['Restricted prior', 'Training Round 30', 'Initial Propsal'])
 temp4 = torch.log10(torch.abs(temp3.squeeze()))
 
 sns.kdeplot(df3, label=['Restricted Round 90', 'Training Round 30', 'Initial Proposal'])
 plt.xlabel('Unscaled Selection (|s})')
 plt.ylabel('Density')
-plt.savefig('para_monarch_dfe_30.png')
+plt.savefig('para_dfe_monarch_nsf_30.png')
 plt.close()
 temp4 = torch.log10(torch.abs(temp3.squeeze()))
 df4 = pd.DataFrame(temp4.cpu().numpy(), columns=['DFE Round 90', 'Training Round 90', 'Initial Propsal'])
@@ -255,4 +256,4 @@ df4 = pd.DataFrame(temp4.cpu().numpy(), columns=['DFE Round 90', 'Training Round
 sns.kdeplot(df4, label=['DFE Round 90', 'Training Round 30', 'Initial Proposal'])
 plt.xlabel('Unscaled Selection (log(|s|)})')
 plt.ylabel('Density')
-plt.savefig('para_dfe_monarch_log_30.png')
+plt.savefig('para_dfe_monarch_log__nsf_30.png')

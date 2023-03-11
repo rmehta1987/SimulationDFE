@@ -246,8 +246,8 @@ class SummaryNet(nn.Module):
         self.sample_size = sample_size # For monarch this needs to be divisible by the block size
         self.block_size = block_sizes
         self.linear4 = MonarchLinear(sample_size, int(sample_size / 10), nblocks=self.block_size[0]) # 11171
-        self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 50) , nblocks=self.block_size[1]) # 2234.2
-        self.linear6 = MonarchLinear(int(self.sample_size / 50), int(self.sample_size / 100), nblocks=self.block_size[2]) # 1117.1
+        self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # 2234.2
+        self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # 1117.1
 
         self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.SiLU(inplace=True),
                                    self.linear5, nn.Dropout(dropout_rate), nn.SiLU(inplace=True),
@@ -281,17 +281,17 @@ def main(argv):
 
     print("Creating embedding network")
    
-    embedding_net = SummaryNet(sample_size*2-1, [64, 64, 16]).to(the_device)
+    embedding_net = SummaryNet(sample_size*2-1, [32, 32, 32]).to(the_device)
     
     print("Finished creating embedding network")
     # First learn posterior
     print("Setting up posteriors")
-    density_estimator_function = posterior_nn(model="maf", embedding_net=embedding_net, hidden_features=num_hidden, num_transforms=number_of_transforms)
+    density_estimator_function = posterior_nn(model="nsf", embedding_net=embedding_net, hidden_features=num_hidden, num_transforms=number_of_transforms)
 
     infer_posterior = SNPE(prior, show_progress_bars=True, device=the_device, density_estimator=density_estimator_function)
 
     #posterior parameters
-    vi_parameters = {"q": "maf", "parameters": {"num_transforms": 3, "hidden_dims": 256}}
+    vi_parameters = {"q": "nsf", "parameters": {"num_transforms": 3, "hidden_dims": 256}}
 
     proposal = prior
 
@@ -304,7 +304,7 @@ def main(argv):
 
     un_learned_prob = [None]*rounds
 
-    path = "Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
+    path = "Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_nsf2{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
     if not (os.path.isdir(path)):
         try:
             os.mkdir(path)

@@ -245,11 +245,12 @@ class SummaryNet(nn.Module):
         super().__init__()
         self.sample_size = sample_size # For monarch this needs to be divisible by the block size
         self.block_size = block_sizes
-        self.linear4 = MonarchLinear(sample_size, self.sample_size, nblocks=self.block_size[0]) # 11171
-        self.linear5 = MonarchLinear(self.sample_size, self.sample_size, nblocks=self.block_size[0]) 
-        
+        self.linear4 = MonarchLinear(sample_size, int(self.sample_size/10), nblocks=self.block_size[0]) # 11171
+        self.linear5 = MonarchLinear(int(self.sample_size/10), int(self.sample_size/10), nblocks=self.block_size[1])
+
+        self.linear6 = MonarchLinear(int(self.sample_size/10), int(self.sample_size/10), nblocks=self.block_size[1])
         self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.SiLU(inplace=True),
-                                   self.linear5) 
+                                   self.linear5, nn.SiLU(inplace=True), self.linear6) 
     def forward(self, x):
         
         x=self.model(x)
@@ -295,7 +296,7 @@ def main(argv):
 
     
     #true_sqldata_to_numpy('emperical_lof_variant_sfs.csv', 'emperical_lof_sfs_nfe.npy')
-    true_x = load_true_data('emperical_missense_sfs_ac_nfe.npy', 0)
+    true_x = load_true_data('emperical_missense_sfs_nfe.npy', 0)
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
     #Set path for experiments
     #true_x = torch.cat([true_x, torch.tensor(0.0, device=the_device).unsqueeze(-1)]) # need an even shape
