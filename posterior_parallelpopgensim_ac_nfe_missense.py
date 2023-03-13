@@ -1,9 +1,9 @@
-import torch
+Cimport torch
 from torch import nn
 from sbi import utils as utils
 from sbi import analysis as analysis
 from sbi.inference.base import infer
-from sbi.inference import SNPE, prepare_for_sbi, simulate_for_sbi, SNLE, MNLE, SNRE, SNRE_A
+from sbi.inference import SNPE, prepare_for_sbi, simulate_for_sbi, SNLE, MNLE, SNRE, SNRE_A, SNRE_C
 from sbi.utils.posterior_ensemble import NeuralPosteriorEnsemble
 from sbi.utils import BoxUniform
 from sbi.utils import MultipleIndependent

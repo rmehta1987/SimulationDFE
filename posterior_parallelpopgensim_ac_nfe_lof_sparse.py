@@ -33,6 +33,8 @@ from pytorch_memlab import MemReporter
 from contextlib import redirect_stdout
 from sbi.simulators.simutils import simulate_in_batches
 
+
+
 # Flag Parser 
 from absl import app 
 from absl import flags
@@ -281,17 +283,17 @@ def main(argv):
 
     print("Creating embedding network")
    
-    embedding_net = SummaryNet(sample_size*2-1, [64, 64, 16]).to(the_device)
+    embedding_net = SummaryNet(sample_size*2-1, [32, 32, 32]).to(the_device)
     
     print("Finished creating embedding network")
     # First learn posterior
     print("Setting up posteriors")
-    density_estimator_function = posterior_nn(model="maf", embedding_net=embedding_net, hidden_features=num_hidden, num_transforms=number_of_transforms)
+    density_estimator_function = posterior_nn(model="nsf", embedding_net=embedding_net, hidden_features=num_hidden, num_transforms=number_of_transforms)
 
     infer_posterior = SNPE(prior, show_progress_bars=True, device=the_device, density_estimator=density_estimator_function)
 
     #posterior parameters
-    vi_parameters = {"q": "maf", "parameters": {"num_transforms": 3, "hidden_dims": 256}}
+    vi_parameters = {"q": "nsf", "parameters": {"num_transforms": 3, "hidden_dims": 256}}
 
     proposal = prior
 
@@ -430,8 +432,8 @@ def main(argv):
             torch.save(posterior, handle)
         with open(path3, "wb") as handle:
             torch.save(posterior_build, handle)
-    
-    with open("inference.pkl", "wb") as handle:
+    inference_path = path+"/inference_{}.pkl".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
+    with open(inference_path, "wb") as handle:
         pickle.dump(infer_posterior, handle)
 
     np.save('un_learned_proposals', un_learned_prob, allow_pickle=True)
