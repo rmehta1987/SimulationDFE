@@ -44,7 +44,7 @@ logging.getLogger('matplotlib').setLevel(logging.ERROR) # See: https://github.co
 flags.DEFINE_integer('sample_size', 55855, 'Diploid Population Sample Size where N is the number of diploids') # should be 55855
 flags.DEFINE_integer('num_hidden',256, "Number of hidden layers in normalizing flow architecture")
 flags.DEFINE_integer('num_sim', 200, 'How many simulations to run')
-flags.DEFINE_integer('rounds', 100, 'How many round of simulations to run, (total simulations = num_sim*rounds')
+flags.DEFINE_integer('rounds', 50, 'How many round of simulations to run, (total simulations = num_sim*rounds')
 flags.DEFINE_integer('seed', 10, 'A seed to set for reproducability')
 flags.DEFINE_integer('number_of_transforms', 3, "How many normalizing flow blocks to use")
 flags.DEFINE_integer('num_workers', 2, "How many workers to use for parallel simulations, be careful, can cause crashing")
@@ -317,6 +317,8 @@ def main(argv):
     for i in range(0,rounds):
 
         theta = proposal.sample((num_sim,))
+        #This determines which theta are too far out of the ones that are cached to simulate these for
+        #Storage
         un_learned_prob[i], theta = change_out_of_distance_proposals(theta.cpu().squeeze().numpy())
 
         x = simulate_in_batches(simulator, theta, num_workers=1, show_progress_bars=True)
@@ -331,9 +333,9 @@ def main(argv):
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_push("forward iteration{}".format(i))
         if i == 0:
-            infer_posterior.append_simulations(theta, x,data_device='cpu' ).train(force_first_round_loss=True, learning_rate=5e-3, training_batch_size=10, show_train_summary=True)
+            infer_posterior.append_simulations(theta, x,data_device='cpu' ).train(force_first_round_loss=True, learning_rate=5e-4, training_batch_size=10, use_combined_loss=True, show_train_summary=False)
         else:
-            infer_posterior.append_simulations(theta, x, posterior_build, data_device='cpu' ).train(force_first_round_loss=True, learning_rate=5e-3, training_batch_size=10, show_train_summary=True)
+            infer_posterior.append_simulations(theta, x, posterior_build, data_device='cpu' ).train(force_first_round_loss=True, learning_rate=5e-4, training_batch_size=10, use_combined_loss=True, show_train_summary=True)
 
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_pop()
@@ -346,18 +348,18 @@ def main(argv):
         print("Training to emperical observation")
         # This proposal is used for Varitaionl inference posteior
         posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=False)
-        #posterior_build.evaluate(quality_control_metric= "prop", N=60)
+        posterior_build.evaluate(quality_control_metric= "prop", N=60)
         #posterior_build.evaluate(quality_control_metric= "psis", N=60)
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_pop()
-        if i >= 5 and i%5 == 0:
+        if i >= 5 and i%20 == 0:
             #torch.cuda.nvtx.range_push("threshold iteration{}".format(i))
             reporter = MemReporter()
             with open(f'summary_memory_{i}.txt', 'w') as f:
                 with redirect_stdout(f):
                     reporter.report()
 
-        accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-5)
+        accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-6)
         proposal = RestrictedPrior(prior, accept_reject_fn, posterior_build, sample_with="sir", device=the_device)
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_pop()
@@ -388,6 +390,20 @@ def main(argv):
                     torch.save(posterior, handle)
                 with open(path3, "wb") as handle:
                     torch.save(posterior_build, handle)
+        if i % 20 == 0 and i > 0:
+            path1 =path+"/unlearned_proposals_{}".format(i)
+            temp = np.asarray(un_learned_prob, dtype=obj)
+            np.save(path1, temp, allow_pickle=True)
+            del temp
+            try:
+                path1 =path+"/inference_round_{}.pkl".format(i)
+                with open(path1, "wb") as handle:
+                    pickle.dump(infer_posterior, handle)
+            except Exception:
+                pass
+            
+
+            
             print("\n ****************************************** Saved Posterior for round {} ******************************************.\n".format(i))
 
     # Save posteriors and proposals for later use
@@ -431,10 +447,15 @@ def main(argv):
         with open(path3, "wb") as handle:
             torch.save(posterior_build, handle)
     
-    with open("inference.pkl", "wb") as handle:
-        pickle.dump(infer_posterior, handle)
-
-    np.save('un_learned_proposals_lof_2', un_learned_prob, allow_pickle=True)
+    try:
+        with open("inference_laslt_round.pkl", "wb") as handle:
+            pickle.dump(infer_posterior, handle)
+    except Exception:
+        pass
+    
+    path1 =path+"/inference_lastround"
+    un_learned_prob = np.asarray(un_learned_prob, dtype=obj)
+    np.save('path1', un_learned_prob, allow_pickle=True)
 
 
 if __name__ == '__main__':

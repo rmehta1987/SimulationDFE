@@ -1,6 +1,0 @@
-/project/jjberg/mehta5/SimulationDFE/SFS/lib/python3.8/site-packages/sbi/utils/torchutils.py:27: UserWarning: GPU was selected as a device for training the neural network. Note that we expect **no** significant speed ups in training for the default architectures we provide. Using the GPU will be effective only for large neural networks with operations that are fast on the GPU, e.g., for a CNN or RNN `embedding_net`.
-  warnings.warn(
-Traceback (most recent call last):
-  File "loading_checks.py", line 244, in <module>
-    temp3 = -1*torch.cat((dfe, post90.sample((100000,)), prior.sample((100000,))),dim=1)
-NameError: name 'post90' is not defined

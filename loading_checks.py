@@ -145,7 +145,7 @@ the_device='cuda:0'
 prior = utils.BoxUniform(low=-0.990 * torch.ones(1, device=the_device), high=-1e-8*torch.ones(1,device=the_device),device=the_device)
 
 
-saved_path='Experiments/Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_2023-03-07_13-24'
+saved_path='Experiments/saved_posteriors_nfe_infer_missense_selection_monarch_2023-03-07_14-47'
 
 
 
@@ -169,6 +169,8 @@ for i, a_file in enumerate(lsdirs):
         if i < len(lsdirs)-1:
             del post
 
+post_obs = torch.load(f'{saved_path}/{lsdirs[-1]}')
+
 #post_dict['intial'] = prior.sample((100000,)).cpu().squeeze().numpy()
 #obs_dict['intial'] = prior.sample((100000,)).cpu().squeeze().numpy()
 
@@ -186,7 +188,7 @@ plt.xlabel('Unscaled Selection (|s|)')
 plt.ylabel('Density')
 plt.title('Density Selection Coefficients Sampled from Inferred Distributions of round')
 plt.tight_layout()
-plt.savefig('para_lof_monarch_obs_nsf_30.png')
+plt.savefig('para_missense_monarch_obs_nsf_30.png')
 plt.close()
 
 
@@ -197,7 +199,7 @@ plt.xlabel('Unscaled Selection (log{|s|))')
 plt.ylabel('Density')
 plt.title('Density Selection Coefficients Sampled from Inferred Distributions of round')
 plt.tight_layout()
-plt.savefig('para_lof_monarch_obs_log_nsf_30.png')
+plt.savefig('para_missense__monarch_obs_log_nsf_30.png')
 plt.close()
 
 '''
@@ -248,7 +250,7 @@ temp4 = torch.log10(torch.abs(temp3.squeeze()))
 sns.kdeplot(df3, label=['Restricted Round 90', 'Training Round 30', 'Initial Proposal'])
 plt.xlabel('Unscaled Selection (|s})')
 plt.ylabel('Density')
-plt.savefig('para_dfe_monarch_nsf_30.png')
+plt.savefig('para_dfe_misenese_monarch_nsf_30.png')
 plt.close()
 temp4 = torch.log10(torch.abs(temp3.squeeze()))
 df4 = pd.DataFrame(temp4.cpu().numpy(), columns=['DFE Round 90', 'Training Round 90', 'Initial Propsal'])
@@ -256,4 +258,4 @@ df4 = pd.DataFrame(temp4.cpu().numpy(), columns=['DFE Round 90', 'Training Round
 sns.kdeplot(df4, label=['DFE Round 90', 'Training Round 30', 'Initial Proposal'])
 plt.xlabel('Unscaled Selection (log(|s|)})')
 plt.ylabel('Density')
-plt.savefig('para_dfe_monarch_log__nsf_30.png')
+plt.savefig('para_dfe_monarch_log_miense_nsf_30.png')
