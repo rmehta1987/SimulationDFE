@@ -246,11 +246,11 @@ class SummaryNet(nn.Module):
         self.sample_size = sample_size # For monarch this needs to be divisible by the block size
         self.block_size = block_sizes
         self.linear4 = MonarchLinear(sample_size, int(sample_size / 10), nblocks=self.block_size[0]) # 11171
-        self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # 2234.2
-        self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # 1117.1
+        self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # 11171
+        self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # 11171
 
-        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.SiLU(inplace=True),
-                                   self.linear5, nn.Dropout(dropout_rate), nn.SiLU(inplace=True),
+        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(inplace=True),
+                                   self.linear5, nn.Dropout(dropout_rate), nn.GELU(inplace=True),
                                    self.linear6) 
     def forward(self, x):
         
@@ -347,8 +347,17 @@ def main(argv):
 
         print("Training to emperical observation")
         # This proposal is used for Varitaionl inference posteior
-        posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=False)
-        posterior_build.evaluate(quality_control_metric= "prop", N=60)
+        if i == 0:
+            posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=False)
+        else:
+            posterior_build = posterior.train(n_particles=10, max_num_iters=500, quality_control=False)
+        prop_metric = posterior_build.evaluate2(quality_control_metric= "prop", N=200)
+        psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
+        print("Psi Metric is {} and ideally should be less than 0.5.  The Prop Metric is {} and ideally should be greater than 0.5, where 1.0 is best")
+        if psi_metric > 1.0 and prop_metric < 0.5:
+            print("Retraining posterior because it is not proportial to the potential function")
+            posterior.train(learning_rate=5e-4 * 0.1, retrain_from_scratch=True,reset_optimizer=True)
+
         #posterior_build.evaluate(quality_control_metric= "psis", N=60)
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_pop()
@@ -359,7 +368,7 @@ def main(argv):
                 with redirect_stdout(f):
                     reporter.report()
 
-        accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-6)
+        accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-5)
         proposal = RestrictedPrior(prior, accept_reject_fn, posterior_build, sample_with="sir", device=the_device)
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_pop()
