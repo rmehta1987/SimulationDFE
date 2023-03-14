@@ -10,7 +10,7 @@ from sbi.utils import MultipleIndependent
 from sbi.neural_nets.embedding_nets import PermutationInvariantEmbedding, FCEmbedding
 from sbi.utils.user_input_checks import process_prior, process_simulator
 from sbi.utils import get_density_thresholder, RestrictedPrior
-from sbi.utils.get_nn_models import posterior_nn
+from sbi.utils.get_nn_models import posterior_nn, likelihood_nn
 import numpy as np
 from matplotlib import pyplot as plt
 import pickle
@@ -31,6 +31,8 @@ from monarch_linear import MonarchLinear
 from torch.profiler import profile, record_function, ProfilerActivity
 from pytorch_memlab import MemReporter
 from contextlib import redirect_stdout
+from sbi.simulators.simutils import simulate_in_batches
+
 
 # Flag Parser 
 from absl import app 
@@ -160,6 +162,18 @@ def generate_sim_data_from_hdf5(prior: float) -> torch.float32:
     #return torch.cat([torch.poisson(torch.tensor(data, device=the_device)).type(torch.float32), torch.tensor([0.0],device=the_device)])
     return torch.poisson(torch.tensor(data, device=the_device)).type(torch.float32)
 
+def change_out_of_distance_proposals(prior: float):
+     
+    need_to_learn = []
+    for j, a_prior in enumerate(prior):
+        _, idx = loaded_tree.query(a_prior, k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
+        cached_keys = float(loaded_file_keys[idx[0]])
+        the_idx = np.abs(cached_keys - a_prior) > 1e-4
+        if the_idx:
+            prior[j] = cached_keys
+            need_to_learn.append(a_prior)
+        return need_to_learn, torch.tensor(prior, dtype=torch.float32).unsqueeze(-1)
+
 
 def true_sqldata_to_numpy(a_path: str, save_as: str):
     """_summary_
@@ -245,7 +259,7 @@ def main(argv):
     print("Finished creating embedding network")
     # First learn posterior
     print("Setting up posteriors")
-    density_estimator_function = posterior_nn(model="nsf", embedding_net=embedding_net, hidden_features=num_hidden, num_transforms=number_of_transforms)
+    density_estimator_function = likelihood_nn(model="maf", hidden_features=num_hidden, num_transforms=number_of_transforms)
 
     infer_posterior = SNLE(prior, show_progress_bars=True, device=the_device, density_estimator=density_estimator_function)
 
@@ -254,10 +268,11 @@ def main(argv):
 
     proposal = prior
 
-    
     #true_sqldata_to_numpy('emperical_lof_variant_sfs.csv', 'emperical_lof_sfs_nfe.npy')
     true_x = load_true_data('emperical_lof_sfs_nfe.npy', 0)
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
+    with torch.no_grad():
+            true_x = embedding_net(true_x.to(the_device).unsqueeze(0))
     #Set path for experiments
     #true_x = torch.cat([true_x, torch.tensor(0.0, device=the_device).unsqueeze(-1)]) # need an even shape
 
@@ -270,22 +285,23 @@ def main(argv):
 
     # Train posterior
     print("Starting to Train")
+    un_learned_prob = [None]*rounds
 
     for i in range(0,rounds):
 
-        theta, x = simulate_for_sbi(simulator, proposal, num_sim, num_workers=1)
-        #theta = theta.to(the_device)
-        #x = x.to(the_device)
+        theta = proposal.sample((num_sim,))
+        un_learned_prob[i], theta = change_out_of_distance_proposals(theta.cpu().squeeze().numpy())
+
+        x = simulate_in_batches(simulator, theta, num_workers=1, show_progress_bars=True)
+        with torch.no_grad():
+            x = embedding_net(x.to(the_device))
         print("Inferring posterior for round {}\n".format(i))
         #if i==5:
         #    torch.cuda.cudart().cudaProfilerStart()
 
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_push("forward iteration{}".format(i))
-        if i == 0:
-            infer_posterior.append_simulations(theta, x,data_device='cpu' ).train(learning_rate=5e-3, training_batch_size=10, show_train_summary=True)
-        else:
-            infer_posterior.append_simulations(theta, x, data_device='cpu').train(force_first_round_loss=True, learning_rate=5e-3, training_batch_size=10, show_train_summary=True)
+        infer_posterior.append_simulations(theta, x, data_device='cpu').train(learning_rate=5e-4, training_batch_size=10, show_train_summary=True)
 
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_pop()
@@ -297,8 +313,9 @@ def main(argv):
 
         print("Training to emperical observation")
         # This proposal is used for Varitaionl inference posteior
-        posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=False)
+        posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=True)
         prop_metric = posterior_build.evaluate2(quality_control_metric= "prop", N=60)
+        print(f'the proportion metric: {prop_metric}')
         if prop_metric < 0.6:
             np.save(f'll_theta_prop_{i}.txt',theta.squeeze().cpu().numpy(),fmt='%.9e')
         del prop_metric
