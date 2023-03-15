@@ -249,8 +249,8 @@ class SummaryNet(nn.Module):
         self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # 11171
         self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # 11171
 
-        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(inplace=True),
-                                   self.linear5, nn.Dropout(dropout_rate), nn.GELU(inplace=True),
+        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(),
+                                   self.linear5, nn.Dropout(dropout_rate), nn.GELU(),
                                    self.linear6) 
     def forward(self, x):
         
