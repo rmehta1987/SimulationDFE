@@ -43,25 +43,30 @@ def change_out_of_distance_proposals(prior: float):
 get_sim_datafrom_hdf5('sfs_lof_hdf5_data.h5')
 load_emperical = np.load('emperical_lof_sfs_nfe.npy')
 total_sites = np.sum(load_emperical)
-num_samples = 8000
+num_samples = 12000
 # Using α = 0.215, β = 562.1 from https://academic.oup.com/genetics/article/206/1/345/6064197
 m = torch.distributions.Gamma(torch.tensor([0.215]), torch.tensor([562.1]))
 sel_coef = -1*m.sample([num_samples])
 correct_sel_coef = change_out_of_distance_proposals(sel_coef.numpy())
 
 correct_sel_coef = torch.tensor(np.asarray(correct_sel_coef),dtype=torch.float32)
+print("Total number of samples after processing: {}".format(correct_sel_coef.shape[0]))
 
 
 
 
-data = torch.zeros_like(torch.tensor(load_emperical).type(torch.float32))
 
-for a_sel_coef in sel_coef:
+batches = torch.split(correct_sel_coef, int(num_samples/100))
+print("Total number of batches: {}".format(len(batches)))
 
-    data += get_sim_data(a_sel_coef)
 
-data = data / (num_samples*1.0)
+for j, batch in enumerate(batches):
+    data = torch.zeros_like(torch.tensor(load_emperical).type(torch.float32))
+    for k, a_sel_coef in enumerate(batch):
+        data += get_sim_data(a_sel_coef)
 
-torch.save(data, 'gamma_dfe.pkl')
+    print(f"Finshed batch {j}")
+    data = data / (k*1.0)
+    torch.save(data, f'gamma_dfe+{j}.pkl')
         
 
