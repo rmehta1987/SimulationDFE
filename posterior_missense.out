@@ -1,0 +1,9 @@
+/project/jjberg/mehta5/SimulationDFE/SFS/lib/python3.8/site-packages/sbi/utils/torchutils.py:27: UserWarning: GPU was selected as a device for training the neural network. Note that we expect **no** significant speed ups in training for the default architectures we provide. Using the GPU will be effective only for large neural networks with operations that are fast on the GPU, e.g., for a CNN or RNN `embedding_net`.
+  warnings.warn(
+The device is: cuda
+Creating embedding network
+Finished creating embedding network
+Setting up posteriors
+True data shape (should be the same as the sample size): 111709 111709
+Starting to Train
+Running 200 simulations.:   0%|          | 0/200 [00:00<?, ?it/s]Running 200 simulations.:   2%|▎         | 5/200 [00:00<00:04, 42.15it/s]Running 200 simulations.:   5%|▌         | 10/200 [00:00<00:07, 24.08it/s]Running 200 simulations.:   6%|▋         | 13/200 [00:00<00:08, 21.89it/s]

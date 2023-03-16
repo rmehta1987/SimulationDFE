@@ -297,14 +297,14 @@ def main(argv):
 
     
     #true_sqldata_to_numpy('emperical_lof_variant_sfs.csv', 'emperical_lof_sfs_nfe.npy')
-    true_x = load_true_data('emperical_lof_sfs_nfe.npy', 0)
+    true_x = load_true_data('final_gamma_dfe.pkl', 1)
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
     #Set path for experiments
     #true_x = torch.cat([true_x, torch.tensor(0.0, device=the_device).unsqueeze(-1)]) # need an even shape
 
     un_learned_prob = [None]*rounds
 
-    path = "Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_nsf2{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
+    path = "Experiments/saved_posteriors_nfe_infer_gamma_selection_monarch_nsf2{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
     if not (os.path.isdir(path)):
         try:
             os.mkdir(path)

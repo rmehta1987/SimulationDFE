@@ -291,7 +291,7 @@ def main(argv):
     infer_posterior = SNPE(prior, show_progress_bars=True, device=the_device, density_estimator=density_estimator_function)
 
     #posterior parameters
-    vi_parameters = {"q": "nsf", "parameters": {"num_transforms": 3, "hidden_dims": 256}}
+    vi_parameters = {"q": "gaussian", "parameters": {"num_transforms": 3, "hidden_dims": 256}}
 
     proposal = prior
 
@@ -347,7 +347,7 @@ def main(argv):
 
         print("Training to emperical observation")
         # This proposal is used for Varitaionl inference posteior
-        posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=False)
+        posterior_build = posterior.set_default_x(true_x).train(n_particles=200, max_num_iters=500, quality_control=False)
         prop_metric = posterior_build.evaluate2(quality_control_metric= "prop", N=200)
         psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
         print(f"Psi Metric is {psi_metric} and ideally should be less than 0.5.  The Prop Metric is {prop_metric} and ideally should be greater than 0.5, where 1.0 is best")
