@@ -51,19 +51,22 @@ correct_sel_coef = change_out_of_distance_proposals(sel_coef.numpy())
 
 correct_sel_coef = torch.tensor(np.asarray(correct_sel_coef),dtype=torch.float32)
 
+print("Total number of samples after processing: {}".format(correct_sel_coef.shape[0]))
 
 
 
 
 
 batches = torch.split(correct_sel_coef, int(num_samples/100))
+print("Total number of batches: {}".format(len(batches)))
+
 
 for j, batch in enumerate(batches):
     data = torch.zeros_like(torch.tensor(load_emperical).type(torch.float32))
-    for k, a_sel_coef in enumerate(sel_coef):
+    for k, a_sel_coef in enumerate(batch):
         data += get_sim_data(a_sel_coef)
-
+    print("Finished batch: {}".format(j))
     data = data / (k*1.0)
-    torch.save(data, f'gamma_dfe+{k}.pkl')
+    torch.save(data, f'gamma_dfe_{j}_with_samples_{k}.pkl')
         
 

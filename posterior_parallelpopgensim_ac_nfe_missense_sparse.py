@@ -351,7 +351,7 @@ def main(argv):
         prop_metric = posterior_build.evaluate2(quality_control_metric= "prop", N=200)
         psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
         print(f"Psi Metric is {psi_metric} and ideally should be less than 0.5.  The Prop Metric is {prop_metric} and ideally should be greater than 0.5, where 1.0 is best")
-        if psi_metric > 1.0 and prop_metric < 0.5:
+        if psi_metric < 0.0 and prop_metric < 0.5:
             print("Retraining posterior because it is not proportial to the potential function")
             posterior_build = posterior.set_default_x(true_x).train(learning_rate=1e-4 * 0.1, retrain_from_scratch=True,reset_optimizer=True, n_particles=100, quality_control=False)
             prop_metric = posterior_build.evaluate2(quality_control_metric= "prop", N=200)
@@ -402,7 +402,7 @@ def main(argv):
                     torch.save(posterior_build, handle)
         if i % 20 == 0 and i > 0:
             path1 =path+"/unlearned_proposals_{}".format(i)
-            temp = np.asarray(un_learned_prob, dtype=obj)
+            temp = np.asarray(un_learned_prob, dtype=object)
             np.save(path1, temp, allow_pickle=True)
             del temp
             try:
@@ -464,7 +464,7 @@ def main(argv):
         pass
     
     path1 =path+"/inference_lastround"
-    un_learned_prob = np.asarray(un_learned_prob, dtype=obj)
+    un_learned_prob = np.asarray(un_learned_prob, dtype=object)
     np.save('path1', un_learned_prob, allow_pickle=True)
 
 
