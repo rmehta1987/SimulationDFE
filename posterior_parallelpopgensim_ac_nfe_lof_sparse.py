@@ -249,8 +249,8 @@ class SummaryNet(nn.Module):
         self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # 11171
         self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # 11171
 
-        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(inplace=True),
-                                   self.linear5, nn.Dropout(dropout_rate), nn.GELU(inplace=True),
+        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(),
+                                   self.linear5, nn.Dropout(dropout_rate), nn.GELU(),
                                    self.linear6) 
     def forward(self, x):
         
@@ -347,16 +347,17 @@ def main(argv):
 
         print("Training to emperical observation")
         # This proposal is used for Varitaionl inference posteior
-        if i == 0:
-            posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=False)
-        else:
-            posterior_build = posterior.train(n_particles=10, max_num_iters=500, quality_control=False)
+        posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=False)
         prop_metric = posterior_build.evaluate2(quality_control_metric= "prop", N=200)
         psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
-        print("Psi Metric is {} and ideally should be less than 0.5.  The Prop Metric is {} and ideally should be greater than 0.5, where 1.0 is best")
-        if psi_metric > 1.0 and prop_metric < 0.5:
+        print(f"Psi Metric is {psi_metric} and ideally should be less than 0.5.  The Prop Metric is {prop_metric} and ideally should be greater than 0.5, where 1.0 is best")
+        if psi_metric < 0.0  and prop_metric < 0.5:
             print("Retraining posterior because it is not proportial to the potential function")
-            posterior.train(learning_rate=5e-4 * 0.1, retrain_from_scratch=True,reset_optimizer=True)
+            posterior_build = posterior.set_default_x(true_x).train(learning_rate=1e-4 * 0.1, retrain_from_scratch=True,reset_optimizer=True, quality_control=False, n_particles=100)
+            psii_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
+            prop_metric = posterior_build.evaluate2(quality_control_metric= "prop", N=200)
+            print("Psi Metric is {} and ideally should be less than 0.5.  The Prop Metric is {} and ideally should be greater than 0.5, where 1.0 is best".format(psi_metric, prop_metric))
+
 
         #posterior_build.evaluate(quality_control_metric= "psis", N=60)
         #if i > 5 and i%5 == 0:
@@ -401,7 +402,7 @@ def main(argv):
                     torch.save(posterior_build, handle)
         if i % 20 == 0 and i > 0:
             path1 =path+"/unlearned_proposals_{}".format(i)
-            temp = np.asarray(un_learned_prob, dtype=obj)
+            temp = np.asarray(un_learned_prob, dtype=object)
             np.save(path1, temp, allow_pickle=True)
             del temp
             try:
@@ -463,7 +464,7 @@ def main(argv):
         pass
     
     path1 =path+"/inference_lastround"
-    un_learned_prob = np.asarray(un_learned_prob, dtype=obj)
+    un_learned_prob = np.asarray(un_learned_prob, dtype=object)
     np.save('path1', un_learned_prob, allow_pickle=True)
 
 
