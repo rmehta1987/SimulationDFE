@@ -19,7 +19,7 @@ def get_data_and_put(data_path: str, file_name: str,):
     lsdirs = os.listdir(data_path)
     regex_remove_last = re.compile(r'((?!last).)*$')
     sel_list_files = list(filter(regex_remove_last.match,lsdirs))
-    
+
     regex_capture_selection_files = re.compile(r'^.*[{|}].*$')
     sel_list_files = list(filter(regex_capture_selection_files.match, sel_list_files))
     regex_capture_selection_coef = re.compile(r'(?<={)(.*)(?=})')
@@ -29,7 +29,7 @@ def get_data_and_put(data_path: str, file_name: str,):
         sel_coef = regex_capture_selection_coef.search(a_file)[1] # gets the actual selection coefficient
         the_sfs = np.loadtxt(full_file_path, dtype=float)[1:] # first line is number of mutations
         sel_sfs_dict[sel_coef] = the_sfs
-    
+
     print('Finished creating sorted-dictionary')
     np.save(file_name, sel_sfs_dict, allow_pickle=True)
 
@@ -44,18 +44,18 @@ def create_hdf5_dataset(data_path: str, file_name: str):
     lsdirs = os.listdir(data_path)
     regex_remove_last = re.compile(r'((?!last).)*$')
     sel_list_files = list(filter(regex_remove_last.match,lsdirs))
-    
+
     regex_capture_selection_files = re.compile(r'^.*[{|}].*$')
     sel_list_files = list(filter(regex_capture_selection_files.match, sel_list_files))
     regex_capture_selection_coef = re.compile(r'(?<={)(.*)(?=})')
-    
+
     with h5py.File(file_name, "w") as the_file:
         for a_file in sel_list_files:
             full_file_path = f'{data_path}{a_file}'
             sel_coef = regex_capture_selection_coef.search(a_file)[1] # gets the actual selection coefficient
             the_sfs = np.loadtxt(full_file_path, dtype=float)[1:] # first line is number of mutations
             the_file.create_dataset(sel_coef, data=the_sfs)
-    
+
     print('Finished creating hdf5 dataset')
 
 def main():
@@ -63,12 +63,13 @@ def main():
     #missense_data_path = 'missense_sim_sfs_data/'
     #lof_data_path = '/home/rahul/PopGen/SimulationSFS/ParallelPopGen_Data/sfs_sims_lof_avg_rate/'
     #lof_data_path2 = '/home/rahul/PopGen/SimulationSFS/cur_data_made_02_22/'
-    lof_data_path = 'lof_sim_sfs_data/'
-    file_name = 'sfs_lof_hdf5_data.h5'
+    #lof_data_path = 'lof_sim_sfs_data/'
+    msl_missense_data = 'msl_sim_sfs_data/'
+    file_name = 'msl_sfs_missense_hdf5_data.h5'
     create_hdf5_dataset(lof_data_path, file_name)
 
 
 if __name__ == "__main__":
     main()
-    
+
 

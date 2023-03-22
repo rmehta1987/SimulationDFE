@@ -146,7 +146,7 @@ bins = [0, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
 prior = utils.BoxUniform(low=-0.990 * torch.ones(1, device=the_device), high=-1e-8*torch.ones(1,device=the_device),device=the_device)
 
 
-saved_path='Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_nsf22023-03-13_10-40'
+saved_path='Experiments/saved_posteriors_nfe_infer_missense_selection_monarch_nsf_2023-03-16_18-17'
 
 
 
@@ -159,7 +159,7 @@ for i, a_file in enumerate(lsdirs):
         round_num = int(re.search("\d+", a_file)[0])
         post_obs = torch.load(f'{saved_path}/{a_file}')
         samples = post_obs.sample((100000,))/2.0
-        obs_dict[round_num] = samples.cpu().squeeze().numpy()
+        obs_dict[round_num+1] = samples.cpu().squeeze().numpy()
         #if i < len(lsdirs)-1:
         #    del post_obs
     elif 'posterior' in a_file and 'observed' not in a_file and 'last' not in a_file:
@@ -167,15 +167,15 @@ for i, a_file in enumerate(lsdirs):
         round_num = int(re.search("\d+", a_file)[0])
         post = torch.load(f'{saved_path}/{a_file}')
         samples = post.sample((100000,))/2.0
-        post_dict[round_num] = samples.cpu().squeeze().numpy()
+        post_dict[round_num+1] = samples.cpu().squeeze().numpy()
         #if i < len(lsdirs)-1:
         #    del post
-
-#post_obs = torch.load(f'{saved_path}/{lsdirs[-1]}')
-
-#post_dict['intial'] = prior.sample((100000,)).cpu().squeeze().numpy()
+    #elifcd 
 #obs_dict['intial'] = prior.sample((100000,)).cpu().squeeze().numpy()
 
+prior2 = torch.distributions.Gamma(torch.tensor([0.215], device=the_device), torch.tensor([562.1],device=the_device))
+post_dict[0] = prior.sample((100000,)).cpu().squeeze().numpy()
+obs_dict[0] = prior.sample((100000,)).cpu().squeeze().numpy()
 postdf = pd.DataFrame.from_dict(post_dict)
 obsdf = pd.DataFrame.from_dict(obs_dict)
 
@@ -186,7 +186,7 @@ plt.xlabel('Unscaled Selection (|s|)')
 plt.ylabel('Density')
 plt.title('Density Selection Coefficients Sampled from Inferred Distributions of round')
 plt.tight_layout()
-plt.savefig('para_lof_monarch_obs_nsf_30.png')
+plt.savefig('para_missense_observed.png')
 plt.close()
 
 
@@ -197,7 +197,7 @@ plt.xlabel('Unscaled Selection (log{|s|))')
 plt.ylabel('Density')
 plt.title('Density Selection Coefficients Sampled from Inferred Distributions of round')
 plt.tight_layout()
-plt.savefig('para_lof__monarch_obs_log_nsf_30.png')
+plt.savefig('para_missense_log_scale.png')
 plt.close()
 
 '''
@@ -242,27 +242,28 @@ plt.close()
 
 #post_obs = postdf[max_round]
 
+
 accept_reject_fn = get_density_thresholder(post_obs, quantile=1e-5)
 proposal = RestrictedPrior(prior, accept_reject_fn, post_obs, sample_with="sir", device=the_device)
 
 
 dfe = proposal.sample((100000,))/2.0
-temp3 = -1*torch.cat((dfe, post_obs.sample((100000,))/2.0, prior.sample((100000,))),dim=1)
-df3 = pd.DataFrame(temp3.cpu().numpy(), columns=['Restricted prior', 'Training Round 30', 'Initial Propsal'])
+temp3 = torch.abs(torch.cat((dfe, post_obs.sample((100000,))/2.0, prior.sample((100000,))),dim=1))
+df3 = pd.DataFrame(temp3.cpu().numpy(), columns=['Restricted prior', 'Last Training Round', 'Initial Propsal'])
 temp4 = torch.log10(torch.abs(temp3.squeeze()))
 
-sns.kdeplot(df3, label=['Restricted Round 90', 'Training Round 30', 'Initial Proposal'])
+sns.kdeplot(df3, label=['Last Restricted Round', 'Last Training Round', 'Initial Proposal'])
 plt.xlabel('Unscaled Selection (|s})')
 plt.ylabel('Density')
-plt.savefig('para_dfe_misenese_monarch_nsf_lof_30.png')
+plt.savefig('para_dfe_missense.png')
 plt.close()
 temp4 = torch.log10(torch.abs(temp3.squeeze()))
-df4 = pd.DataFrame(temp4.cpu().numpy(), columns=['DFE Round 90', 'Training Round 90', 'Initial Propsal'])
+df4 = pd.DataFrame(temp4.cpu().numpy(), columns=['Last DFE Round', 'Last Training Round', 'Initial Propsal'])
 
 sns.kdeplot(df4, label=['DFE Round 90', 'Training Round 30', 'Initial Proposal'])
 plt.xlabel('Unscaled Selection (log(|s|)})')
 plt.ylabel('Density')
-plt.savefig('para_dfe_monarch_log_lof_nsf_30.png')
+plt.savefig('para_dfe_log_missense.png')
 
 
 dfe2 = proposal.sample((500000,))/2.0

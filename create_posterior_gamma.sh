@@ -6,7 +6,7 @@
 #SBATCH --time=19:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --mem=18G
-#SBATCH --output=posterior_lof.out
+#SBATCH --output=gamma_lof.out
 # TO USE V100 specify --constraint=v100
 # TO USE RTX600 specify --constraint=rtx6000
 #******SBATCH --constraint=v100   # constraint job runs on V100 GPU use
