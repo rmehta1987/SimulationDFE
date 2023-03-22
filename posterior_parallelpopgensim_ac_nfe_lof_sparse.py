@@ -27,7 +27,7 @@ from scipy.spatial import KDTree
 #from pytorch_block_sparse import BlockSparseLinear
 from sparselinear import activationsparsity as asy
 from monarch_linear import MonarchLinear
-
+from sbi.samplers.vi.vi_pyro_flows import build_flow 
 from torch.profiler import profile, record_function, ProfilerActivity
 from pytorch_memlab import MemReporter
 from contextlib import redirect_stdout
@@ -172,7 +172,7 @@ def generate_sim_data(prior: float) -> torch.float32:
     _, idx = loaded_tree.query(prior.cpu().numpy(), k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
     data = loaded_file[loaded_file_keys[idx[0]]]
 
-    return torch.poisson(torch.tensor(data, device=the_device)).type(torch.float32)
+    return torch.poisson(torch.tensor(data[1:], device=the_device)).type(torch.float32) # because 0th bin is monomorphic sites
 
 def change_out_of_distance_proposals(prior: float):
      
@@ -199,7 +199,7 @@ def generate_sim_data_from_hdf5(prior: float) -> torch.float32:
     data = loaded_file[loaded_file_keys[idx[0]]][:]
 
     #return torch.cat([torch.poisson(torch.tensor(data, device=the_device)).type(torch.float32), torch.tensor([0.0],device=the_device)])
-    return torch.poisson(torch.tensor(data, device=the_device)).type(torch.float32)
+    return torch.poisson(torch.tensor(data[:-1], device=the_device)).type(torch.float32)
 
 
 def true_sqldata_to_numpy(a_path: str, save_as: str):
@@ -249,8 +249,8 @@ class SummaryNet(nn.Module):
         self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # 11171
         self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # 11171
 
-        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(inplace=True),
-                                   self.linear5, nn.Dropout(dropout_rate), nn.GELU(inplace=True),
+        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(),
+                                   self.linear5, nn.Dropout(dropout_rate), nn.GELU(),
                                    self.linear6) 
     def forward(self, x):
         
@@ -272,7 +272,7 @@ def main(argv):
     get_sim_datafrom_hdf5('sfs_lof_hdf5_data.h5')
     
 
-    box_uniform_prior = utils.BoxUniform(low=-0.990 * torch.ones(1, device=the_device), high=-1e-8*torch.ones(1,device=the_device),device=the_device)
+    box_uniform_prior = utils.BoxUniform(low=-0.20 * torch.ones(1, device=the_device), high=-1e-4*torch.ones(1,device=the_device),device=the_device)
     # Set up prior and simulator for SBI
     prior, num_parameters, prior_returns_numpy = process_prior(box_uniform_prior)
 
@@ -281,30 +281,30 @@ def main(argv):
 
     print("Creating embedding network")
    
-    embedding_net = SummaryNet(sample_size*2-1, [32, 32, 32]).to(the_device)
+    embedding_net = SummaryNet(sample_size*2-2, [32, 32, 32]).to(the_device)
     
     print("Finished creating embedding network")
     # First learn posterior
     print("Setting up posteriors")
-    density_estimator_function = posterior_nn(model="nsf", embedding_net=embedding_net, hidden_features=num_hidden, num_transforms=number_of_transforms)
+    density_estimator_function = posterior_nn(model="maf", embedding_net=embedding_net, hidden_features=10000, num_transforms=number_of_transforms)
 
     infer_posterior = SNPE(prior, show_progress_bars=True, device=the_device, density_estimator=density_estimator_function)
 
     #posterior parameters
-    vi_parameters = {"q": "nsf", "parameters": {"num_transforms": 3, "hidden_dims": 256}}
+    vi_parameters = {"q": "gaussian", "parameters": {"num_transforms": 3, "hidden_dims": 256}}
 
     proposal = prior
 
     
     #true_sqldata_to_numpy('emperical_lof_variant_sfs.csv', 'emperical_lof_sfs_nfe.npy')
-    true_x = load_true_data('emperical_lof_sfs_nfe.npy', 0)
-    print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
+    true_x = load_true_data('emperical_lof_sfs_nfe.npy', 0)[:-1]
+    print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1-1))
     #Set path for experiments
     #true_x = torch.cat([true_x, torch.tensor(0.0, device=the_device).unsqueeze(-1)]) # need an even shape
 
     un_learned_prob = [None]*rounds
 
-    path = "Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_nsf2{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
+    path = "Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_gaussian{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
     if not (os.path.isdir(path)):
         try:
             os.mkdir(path)
@@ -320,6 +320,8 @@ def main(argv):
         #This determines which theta are too far out of the ones that are cached to simulate these for
         #Storage
         un_learned_prob[i], theta = change_out_of_distance_proposals(theta.cpu().squeeze().numpy())
+        if un_learned_prob[i]:
+            print("There were this many coefficients that were not cachced: {}".format(len(un_learned_prob[i])))
 
         x = simulate_in_batches(simulator, theta, num_workers=1, show_progress_bars=True)
     
@@ -343,20 +345,24 @@ def main(argv):
         print("\n ****************************************** Building Posterior for round {} ******************************************.\n".format(i))
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_push("posterior iteration{}".format(i))
-        posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters=vi_parameters)
+        #posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters=vi_parameters)
+        posterior = infer_posterior.build_posterior()
 
         print("Training to emperical observation")
         # This proposal is used for Varitaionl inference posteior
-        if i == 0:
-            posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=False)
-        else:
-            posterior_build = posterior.train(n_particles=10, max_num_iters=500, quality_control=False)
+        #posterior_build = posterior.set_default_x(true_x).train(n_particles=10, max_num_iters=500, quality_control=False)
+        posterior_build = posterior.set_default_x(true_x)
+        '''
         prop_metric = posterior_build.evaluate2(quality_control_metric= "prop", N=200)
         psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
-        print("Psi Metric is {} and ideally should be less than 0.5.  The Prop Metric is {} and ideally should be greater than 0.5, where 1.0 is best")
-        if psi_metric > 1.0 and prop_metric < 0.5:
+        print(f"Psi Metric is {psi_metric} and ideally should be less than 0.5.  The Prop Metric is {prop_metric} and ideally should be greater than 0.5, where 1.0 is best")
+        if psi_metric < 0.0  and prop_metric < 0.5:
             print("Retraining posterior because it is not proportial to the potential function")
-            posterior.train(learning_rate=5e-4 * 0.1, retrain_from_scratch=True,reset_optimizer=True)
+            posterior_build = posterior.set_default_x(true_x).train(learning_rate=1e-4 * 0.1, retrain_from_scratch=True,reset_optimizer=True, quality_control=False, n_particles=100)
+            psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
+            prop_metric = posterior_build.evaluate2(quality_control_metric= "prop", N=200)
+            print("Psi Metric is {} and ideally should be less than 0.5.  The Prop Metric is {} and ideally should be greater than 0.5, where 1.0 is best".format(psi_metric, prop_metric))
+
 
         #posterior_build.evaluate(quality_control_metric= "psis", N=60)
         #if i > 5 and i%5 == 0:
@@ -367,8 +373,8 @@ def main(argv):
             with open(f'summary_memory_{i}.txt', 'w') as f:
                 with redirect_stdout(f):
                     reporter.report()
-
-        accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-5)
+        '''
+        accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-5, num_samples_to_estimate_support=200)
         proposal = RestrictedPrior(prior, accept_reject_fn, posterior_build, sample_with="sir", device=the_device)
         #if i > 5 and i%5 == 0:
         #    torch.cuda.nvtx.range_pop()
@@ -401,7 +407,7 @@ def main(argv):
                     torch.save(posterior_build, handle)
         if i % 20 == 0 and i > 0:
             path1 =path+"/unlearned_proposals_{}".format(i)
-            temp = np.asarray(un_learned_prob, dtype=obj)
+            temp = np.asarray(un_learned_prob, dtype=object)
             np.save(path1, temp, allow_pickle=True)
             del temp
             try:
@@ -463,7 +469,7 @@ def main(argv):
         pass
     
     path1 =path+"/inference_lastround"
-    un_learned_prob = np.asarray(un_learned_prob, dtype=obj)
+    un_learned_prob = np.asarray(un_learned_prob, dtype=object)
     np.save('path1', un_learned_prob, allow_pickle=True)
 
 

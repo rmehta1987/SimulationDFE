@@ -41,45 +41,17 @@ class SummaryNet(nn.Module):
         self.sample_size = sample_size # For monarch this needs to be divisible by the block size
         self.block_size = block_sizes
         self.linear4 = MonarchLinear(sample_size, int(sample_size / 10), nblocks=self.block_size[0]) # 11171
-        self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 50) , nblocks=self.block_size[1]) # 2234.2
-        self.linear6 = MonarchLinear(int(self.sample_size / 50), int(self.sample_size / 100), nblocks=self.block_size[2]) # 1117.1
+        self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # 11171
+        self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # 11171
 
-        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.SiLU(inplace=True),
-                                   self.linear5, nn.Dropout(dropout_rate), nn.SiLU(inplace=True),
+        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(),
+                                   self.linear5, nn.Dropout(dropout_rate), nn.GELU(),
                                    self.linear6) 
     def forward(self, x):
         
         x=self.model(x)
         return x
 
-class SummaryNet5(nn.Module):
-    # in_features * out_features <= 10**8:
-    def __init__(self, sample_size):
-        super().__init__()
-        self.sample_size = sample_size
-        self.linear4 = sl.SparseLinear(int(self.sample_size), int(self.sample_size / 125), dynamic=True) # 893.68
-        self.bn4 = nn.LayerNorm(int(self.sample_size / 125))
-        self.linear5 = sl.SparseLinear(int(self.sample_size / 125), int(self.sample_size / 175), dynamic=True) # 638.34
-        self.bn5 = nn.LayerNorm(int(self.sample_size / 175))
-        self.linear6 = sl.SparseLinear(int(self.sample_size / 175), int(self.sample_size / 200), dynamic=True) # 585.5
-        self.bn6 = nn.LayerNorm(int(self.sample_size / 200))
-        self.linear7 = sl.SparseLinear(int(self.sample_size / 200), int(self.sample_size / 400), dynamic=True) # 279.5
-        self.bn7 = nn.LayerNorm(int(self.sample_size / 400))
-        self.linear8 = sl.SparseLinear(int(self.sample_size / 400), int(self.sample_size / 400), dynamic=True) # 279.25
-
-
-        self.model = nn.Sequential(self.linear4, self.bn4, asy.ActivationSparsity(),
-                                   self.linear5, self.bn5, asy.ActivationSparsity(),
-                                   self.linear6, self.bn6, asy.ActivationSparsity(),
-                                   self.linear7, self.bn7, asy.ActivationSparsity(),
-                                   self.linear8,)
-                                   
-                                   
-
-    def forward(self, x):
-        
-        x=self.model(x)
-        return x
     
 class SummaryNet5(nn.Module):
     # in_features * out_features <= 10**8:
@@ -140,13 +112,14 @@ class SummaryNet7(nn.Module):
         return x
 
 the_device='cuda:0'
-
-
+sample_size = 55855
+embedding_net = SummaryNet(sample_size*2-2, [32, 32, 32]).to(the_device)
 bins = [0, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
+
 prior = utils.BoxUniform(low=-0.990 * torch.ones(1, device=the_device), high=-1e-8*torch.ones(1,device=the_device),device=the_device)
 
 
-saved_path='Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_nsf22023-03-13_10-40'
+saved_path='Experiments/saved_posteriors_nfe_infer_lof_selection_monarch_gaussian2023-03-21_08-54'
 
 
 

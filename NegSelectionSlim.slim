@@ -1,0 +1,181 @@
+// script for Stabalizing Selection using underdominance
+
+
+initialize() {
+	setSeed(100);
+	defineConstant("outfile", "test"); // output filename
+	
+	defineConstant("L", 36e6);      // total chromosome length
+	defineConstant("mu", 7.1111*(10^-10)); // mutation rate
+	defineConstant("dominance_coef", 0.5); // dominance coefficient so that heterozygote is selected against
+	// defineConstant("stable_selection", -1*((1/(4*N))*1e-2));  // selection coefficient for under-dominance
+	defineConstant("recomb_rate", 1e-8);  // recombination rate
+	initializeRecombinationRate(1e-8);
+	initializeMutationRate(mu);
+	
+	initializeMutationType("m2", dominance_coef,  "g", -0.00657402090856, 0.186);  // single selection coefficient
+	initializeGenomicElementType("g1", c(m2), c(1.0));
+	 // uniform chromosome of length 1 Mb with uniform recombination
+    initializeGenomicElement(g1, 0, L);
+    
+}
+
+/// **Demography:**
+
+// Create the ancestral population
+1 early() {
+	sim.addSubpop("p1", 14448);
+}
+4545 early() {
+	p1.setSubpopulationSize(14068);
+}
+11956 early() {
+	p1.setSubpopulationSize(14464);
+}
+17873 early() {
+	p1.setSubpopulationSize(15208);
+}
+22799 early() {
+	p1.setSubpopulationSize(16256);
+}
+27018 early() {
+	p1.setSubpopulationSize(17618);
+}
+30709 early() {
+	p1.setSubpopulationSize(19347);
+}
+33989 early() {
+	p1.setSubpopulationSize(21534);
+}
+36940 early() {
+	p1.setSubpopulationSize(24236);
+}
+39622 early() {
+	p1.setSubpopulationSize(27367);
+}
+42081 early() {
+	p1.setSubpopulationSize(30416);
+}
+44350 early() {
+	p1.setSubpopulationSize(32060);
+}
+46458 early() {
+	p1.setSubpopulationSize(31284);
+}
+47457 early() {
+	p1.setSubpopulationSize(29404);
+}
+48424 early() {
+	p1.setSubpopulationSize(26686);
+}
+49360 early() {
+	p1.setSubpopulationSize(23261);
+}
+50268 early() {
+	p1.setSubpopulationSize(18990);
+}
+50420 early() {
+	p1.setSubpopulationSize(16490);
+}
+50420 early() {
+	p1.setSubpopulationSize(16490);
+}
+51123 early() {
+	p1.setSubpopulationSize(12958);
+}
+51737 early() {
+	p1.setSubpopulationSize(9827);
+}
+52284 early() {
+	p1.setSubpopulationSize(7477);
+}
+52775 early() {
+	p1.setSubpopulationSize(5791);
+}
+53222 early() {
+	p1.setSubpopulationSize(4670);
+}
+53632 early() {
+	p1.setSubpopulationSize(3841);
+}
+54010 early() {
+	p1.setSubpopulationSize(3372);
+}
+54361 early() {
+	p1.setSubpopulationSize(3287);
+}
+54527 early() {
+	p1.setSubpopulationSize(3359);
+}
+54688 early() {
+	p1.setSubpopulationSize(3570);
+}
+54844 early() {
+	p1.setSubpopulationSize(4095);
+}
+54995 early() {
+	p1.setSubpopulationSize(4713);
+}
+55142 early() {
+	p1.setSubpopulationSize(5661);
+}
+55284 early() {
+	p1.setSubpopulationSize(7540);
+}
+55423 early() {
+	p1.setSubpopulationSize(11375);
+}
+55557 early() {
+	p1.setSubpopulationSize(14310);
+}
+55688 early() {
+	p1.setSubpopulationSize(13292);
+}
+55816 early() {
+	p1.setSubpopulationSize(14522);
+}
+55890 early() {
+	p1.setSubpopulationSize(613285);
+}
+55940 early() {
+	p1.setSubpopulationSize(1000000);
+}
+
+
+
+55940 late() {
+	
+	p1.outputVCFSample(111710,filePath="/home/rahul/PopGen/SimulationSFS/slim_lof.vcf");
+	m2muts = sim.mutationsOfType(m2);
+	freqs = sim.mutationFrequencies(p1, m2muts);
+	
+	lines = m2muts.id + "\t" + m2muts.position + "\t" + m2muts.selectionCoeff + "\t" + freqs + "\n";
+	file = paste(lines, sep="");
+	file = "tag" + "\t" + "position" + "\t" + "selection coefficient" + "\t" + "freq\n" + file;
+	if (!writeFile(paste(c(outfile,".mixture"),sep=""), file)) stop("Error writing file.");
+	sim.simulationFinished();
+}
+
+function (integer)mutTypeFrequency(object<Subpopulation>$ subtype, o<MutationType>$ mutType)
+{
+	muts = sim.mutationsOfType(mutType);
+	if (muts.size() > 0)
+	{
+		freqs = sim.mutationFrequencies(subtype, muts);
+		indices = freqs > 0.001;
+		return sum(indices);
+		}
+	return NULL;
+}
+
+function (integer)mutTypeFrequency2(object<Subpopulation>$ subtype, o<MutationType>$ mutType)
+{
+	muts = sim.mutationsOfType(mutType);
+	if (muts.size() > 0)
+	{
+		freqs = sim.mutationFrequencies(subtype, muts);
+		indices = freqs <= 0.001;
+		return sum(indices);
+		}
+	return NULL;
+}

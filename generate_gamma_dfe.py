@@ -67,6 +67,6 @@ for j, batch in enumerate(batches):
 
     print(f"Finshed batch {j}")
     data = data / (k*1.0)
-    torch.save(data, f'gamma_dfe+{j}.pkl')
+    torch.save(data, f'gamma_dfe_{j}.pkl')
         
 
