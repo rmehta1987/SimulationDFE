@@ -64,7 +64,7 @@ def main():
     #lof_data_path = '/home/rahul/PopGen/SimulationSFS/ParallelPopGen_Data/sfs_sims_lof_avg_rate/'
     #lof_data_path2 = '/home/rahul/PopGen/SimulationSFS/cur_data_made_02_22/'
     lof_data_path = 'lof_sim_sfs_data/'
-    file_name = 'sfs_lof_hdf5_data.h5'
+    file_name = 'sfs_lof_hdf5_data_temp.h5'
     create_hdf5_dataset(lof_data_path, file_name)
 
 

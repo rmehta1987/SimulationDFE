@@ -50,11 +50,54 @@ def selection_spectrum(gamma, h=0.5):
     return fs
 
 
-samples_uniform = np.linspace(-.2, -.1, 61)
+samples_uniform = np.logspace(-4, 3, 61)
 
-sims = np.zeros((samples_uniform.shape[0], fs_mis.compressed().shape[0]))
+def generate_spectrum_cache():
+    spectrum_cache = {}
+    spectrum_cache[0] = selection_spectrum(0).compressed()
 
-for a, samples in enumerate(samples_uniform):
-    sims[a] = selection_spectrum(samples).compressed()*theta_mis
+    #sims = np.zeros((samples_uniform.shape[0], fs_mis.compressed().shape[0]))
 
-np.save('moments_msl_sim', sims)
+    for a, samples in enumerate(samples_uniform):
+        spectrum_cache[samples] = selection_spectrum(samples).compressed()*theta_mis
+
+    np.save('moments_msl_spectrum_cache', spectrum_cache, allow_pickle=True)
+
+spectrum_cache = np.load('moments_msl_spectrum_cache.npy', allow_pickle=True).item()
+
+import scipy.stats
+theta_mis = opt_theta * u_mis / u_syn
+theta_lof = opt_theta * u_lof / u_syn
+
+dxs = ((samples_uniform - np.concatenate(([samples_uniform[0]], samples_uniform))[:-1]) / 2
+    + (np.concatenate((samples_uniform, [samples_uniform[-1]]))[1:] - samples_uniform) / 2)
+
+def dfe_func(params, ns, theta=1):
+    alpha, beta, p_misid = params
+    fs = spectrum_cache[0] * scipy.stats.gamma.cdf(samples_uniform[0], alpha, scale=beta) # effectively neutral
+    weights = scipy.stats.gamma.pdf(samples_uniform, alpha, scale=beta)
+    check = 0
+    check2 = []
+    for samples, dx, w in zip(samples_uniform, dxs, weights):
+        fs += spectrum_cache[samples] * dx * w
+        check += dx * w
+        check2.append(check)
+    fs = theta * fs
+    print("Sum of weights: {}.".format(check))
+    print("\n")
+    print("List of weights: {}.".format(check2))
+    return (1 - p_misid) * fs + p_misid * fs[::-1]
+
+def model_func_missense(params, ns):
+    return dfe_func(params, ns, theta=theta_mis)
+
+def model_func_lof(params, ns):
+    return dfe_func(params, ns, theta=theta_lof)
+
+shape = 0.1596
+scale =  2332.3
+misid = 0.0137
+
+opt_params_mis = [shape, scale, misid]
+
+model_mis = model_func_missense(opt_params_mis, fs_mis.sample_sizes)
