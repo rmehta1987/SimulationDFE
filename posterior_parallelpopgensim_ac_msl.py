@@ -311,7 +311,7 @@ def generate_moments_sim_data2(prior: float) -> torch.float32:
     #s_prior, weights = prior[:5], prior[5:]
     #s_prior, p_misid, weights = prior[:7], prior[7], prior[7:]
     fs_aggregate = None
-    gammas = prior.cpu().numpy().squeeze()
+    gammas = -1*10**(prior.cpu().numpy().squeeze())
    
     for j, gamma in enumerate(gammas):
         while rerun:
@@ -451,8 +451,9 @@ def main(argv):
     create_global_variables()
     set_reproducable_seed(FLAGS.seed)
     
-    low_param = (1e-4 * torch.ones(1, device=the_device)).log()
-    high_param = (1000 * torch.ones(1, device=the_device)).log()
+    # Set uniform to [-5, -1e-4] selection < -5 is usually causes mutations to be at very low frequencies
+    high_param = 0.7 * torch.ones(1, device=the_device)
+    low_param = -5.0*torch.ones(1, device=the_device)
     box_uniform_prior = utils.BoxUniform(low=-0.2* torch.ones(6, device=the_device), high=-1e-5*torch.ones(6,device=the_device),device=the_device)
 
     ind_prior = MultipleIndependent(
@@ -469,6 +470,26 @@ def main(argv):
     validate_args=False,)
     ind_prior2 = MultipleIndependent(
     [
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
@@ -512,11 +533,11 @@ def main(argv):
     
     true_x = load_true_data('emperical_missense_sfs_msl.npy', 0).unsqueeze(0)
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
-    path = "Experiments/saved_posteriors_msl_mcf_6_and_psmid_params_{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
-    
+    path = "Experiments/saved_posteriors_msl_mcf_6_and_mse_params_{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
 
     # Train posterior
     print("Starting to Train")
+    calibration_kernel = lambda z: torch.log(torch.sum(torch.nn.functional.mse_loss(z, true_x.repeat(z.shape[0],1).to(the_device),reduction='none'),dim=1))
 
     for i in range(0,rounds):
 
@@ -540,11 +561,11 @@ def main(argv):
 
         if i == 0:
             infer_posterior.append_simulations(theta, x, data_device='cpu' ).train(force_first_round_loss=True, learning_rate=5e-4, 
-                                                                                   training_batch_size=10, use_combined_loss=True, show_train_summary=False, max_num_epochs=50)
+                                                                                   training_batch_size=10, use_combined_loss=True, show_train_summary=False)
         else:
             infer_posterior.append_simulations(theta, x, proposal=posterior_build, data_device='cpu').train(force_first_round_loss=True, 
                                                                                                             learning_rate=5e-4, training_batch_size=10, use_combined_loss=True, 
-                                                                                                            show_train_summary=False)
+                                                                                                            show_train_summary=False, calibration_kernel=calibration_kernel)
 
         print("\n ****************************************** Building Posterior for round {} ******************************************.\n".format(i))
 
@@ -558,8 +579,8 @@ def main(argv):
                     1,
                 )
        
-            vi_parameters = get_flow_builder("nsf", batch_norm=False, base_dist = base_dist, permute = True, num_transforms=5,
-                                             hidden_dims= [64, 64], skip_connections=False, nonlinearity=nn.ReLU(), count_bins=4, order="linear", bound=8 )
+            vi_parameters = get_flow_builder("nsf", batch_norm=False, base_dist = base_dist, permute = True, num_transforms=4,
+                                             hidden_dims= [128, 128], skip_connections=False, nonlinearity=nn.ReLU(), count_bins=4, order="linear", bound=8 )
             posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": vi_parameters})
         else:
             posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": posterior_build})
@@ -569,7 +590,9 @@ def main(argv):
         #posterior_build = posterior.set_default_x(true_x).train(n_particles=200, max_num_iters=500, quality_control=False, stick_the_landing=True)
         posterior_build = posterior.set_default_x(true_x).train(n_particles=200, max_num_iters=500, quality_control=False, stick_the_landing=True)
         psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
+        #prop_metric = posterior_build.evaluate2(quality_control_metric= "prop", N=200)
         print(f"Psi Metric is {psi_metric} and ideally should be less than 0.5.")
+        #print(f"Prop Metric is {prop_metric} and ideally should be greater than 0.5.")
         '''if psi_metric < 0.0  or psi_metric > 0.5:
             print("Retraining posterior because it is not proportial to the potential function")
             posterior_build = posterior.set_default_x(true_x).train(learning_rate=1e-4 * 0.1, stick_the_landing=True, retrain_from_scratch=True,reset_optimizer=True, quality_control=False, n_particles=200, max_num_iters=500)

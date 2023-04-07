@@ -2,6 +2,7 @@ import numpy as np
 import moments
 import h5py
 import torch
+from tqdm import tqdm
 
 
 def generate_moments_sim_data2(prior: float, sample_size: int):
@@ -16,7 +17,7 @@ def generate_moments_sim_data2(prior: float, sample_size: int):
     #s_prior, weights = prior[:6], prior[6:]
     #s_prior, weights = prior[:5], prior[5:]
     #s_prior, p_misid, weights = prior[:7], prior[7], prior[7:]
-    gamma = prior
+    gamma = -1*(10**prior)
    
     while rerun:
         ns_sim = 2 * ns_sim
@@ -38,13 +39,25 @@ def generate_moments_sim_data2(prior: float, sample_size: int):
 
 def create_hdf5_dataset(file_name: str):
 
-    gammas = np.linspace(-5, 0 , 20000)
-    with h5py.File(file_name, "w") as the_file:
-        for gamma in gammas:
-            the_sfs = generate_moments_sim_data2(gamma, sample_size=85)
+    gammas = np.linspace(-5.0, 0.7 , 30000)
+    with h5py.File(file_name, "a") as the_file:
+        for gamma in tqdm(gammas):
             str_gamma = '{:6f}'.format(gamma)
-            the_file.create_dataset(str_gamma, data=the_sfs)
-    
+            if str_gamma in the_file:
+                print(f"This key already exists {gamma}")
+                continue
+            else:
+                the_sfs = generate_moments_sim_data2(gamma, sample_size=85)
+                the_file.create_dataset(str_gamma, data=the_sfs)
+        '''for gamma in tqdm(gammas2):
+            str_gamma = '{:6f}'.format(gamma)
+            if str_gamma in the_file:
+                print(f"This key already exists {gamma}")
+                continue
+            else:
+                the_sfs = generate_moments_sim_data2(gamma, sample_size=85)
+                the_file.create_dataset(str_gamma, data=the_sfs) 
+        '''
     print('Finished creating hdf5 dataset')
 
 def main():
