@@ -18,14 +18,15 @@ def generate_moments_sim_data2(prior: float, sample_size: int):
     #s_prior, weights = prior[:5], prior[5:]
     #s_prior, p_misid, weights = prior[:7], prior[7], prior[7:]
     gamma = -1*(10**prior)
+    nu_func = lambda t: [opt_params[0] * np.exp(
+            np.log(opt_params[1] / opt_params[0]) * t / opt_params[3])]
    
     while rerun:
         ns_sim = 2 * ns_sim
         fs = moments.LinearSystem_1D.steady_state_1D(ns_sim, gamma=gamma, h=h)
         fs = moments.Spectrum(fs)
         fs.integrate([opt_params[0]], opt_params[2], gamma=gamma, h=h)
-        nu_func = lambda t: [opt_params[0] * np.exp(
-            np.log(opt_params[1] / opt_params[0]) * t / opt_params[3])]
+        
         fs.integrate(nu_func, opt_params[3], gamma=gamma, h=h)
         if abs(np.max(fs)) > 10 or np.any(np.isnan(fs)):
             # large gamma-values can require large sample sizes for stability
@@ -39,7 +40,7 @@ def generate_moments_sim_data2(prior: float, sample_size: int):
 
 def create_hdf5_dataset(file_name: str):
 
-    gammas = np.linspace(-5.0, 0.7 , 30000)
+    gammas = np.linspace(-6.0, 5 , 30000)
     with h5py.File(file_name, "a") as the_file:
         for gamma in tqdm(gammas):
             str_gamma = '{:6f}'.format(gamma)

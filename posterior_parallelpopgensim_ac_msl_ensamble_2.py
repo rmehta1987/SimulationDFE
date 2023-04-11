@@ -55,6 +55,7 @@ flags.DEFINE_integer('number_of_transforms', 6, "How many normalizing flow block
 flags.DEFINE_integer('num_workers', 2, "How many workers to use for parallel simulations, be careful, can cause crashing")
 flags.DEFINE_integer('num_blocks', 16, "How many blocks for sparse matrix")
 flags.DEFINE_integer('num_bins', 8, "How many bins to use for rational spline normalizing flows")
+flags.DEFINE_integer('num_ensemble', 10, "How many ensambles for the posterior inference")
 
 flags.DEFINE_float('dropout_probability', 0.1, "Dropout probability")
 flags.DEFINE_float('tail_bound', 3.0, "Bound for each spline only for spline flows")
@@ -107,6 +108,7 @@ def create_global_variables():
     global num_bins
     global tail_bound
     global dropout_probability
+    global num_ensemble
 
 
     the_device = FLAGS.the_device
@@ -128,6 +130,7 @@ def create_global_variables():
     num_bins = FLAGS.num_bins
     tail_bound = FLAGS.tail_bound
     dropout_probability = FLAGS.dropout_probability
+    num_ensemble = FLAGS.num_ensemble
 
 
 
@@ -313,37 +316,31 @@ def generate_moments_sim_data2(prior: float) -> torch.float32:
     #s_prior, weights = prior[:5], prior[5:]
     #s_prior, p_misid, weights = prior[:7], prior[7], prior[7:]
     fs_aggregate = None
-    prior2 = prior[:-1]
-    mis_id = prior[-1].cpu().numpy().squeeze()
-    gammas = -1*10**(prior2.cpu().numpy().squeeze())
-    nu_func = lambda t: [opt_params[0] * np.exp(
-                np.log(opt_params[1] / opt_params[0]) * t / opt_params[3])]
+    gammas = -1*10**(prior.cpu().numpy().squeeze())
+   
     for j, gamma in enumerate(gammas):
         while rerun:
             ns_sim = 2 * ns_sim
             fs = moments.LinearSystem_1D.steady_state_1D(ns_sim, gamma=gamma, h=h)
             fs = moments.Spectrum(fs)
             fs.integrate([opt_params[0]], opt_params[2], gamma=gamma, h=h)
-            
+            nu_func = lambda t: [opt_params[0] * np.exp(
+                np.log(opt_params[1] / opt_params[0]) * t / opt_params[3])]
             fs.integrate(nu_func, opt_params[3], gamma=gamma, h=h)
             if abs(np.max(fs)) > 10 or np.any(np.isnan(fs)):
                 # large gamma-values can require large sample sizes for stability
                 rerun = True
-                del fs
             else:
                 rerun = False
         if j == 0:
             fs_aggregate = fs.project([projected_sample_size]).compressed()*theta_lof
-            fs_aggregate = (1 - mis_id) * fs_aggregate + mis_id * fs_aggregate[::-1]
         else:
             fs2 = fs.project([projected_sample_size]).compressed()*theta_lof
-            fs2 = (1 - mis_id) * fs2 + mis_id * fs2[::-1]
             fs_aggregate += fs2
-        rerun = True
-        ns_sim = 100
+            del fs2
             
     fs_aggregate /= gammas.shape[0]
-    fs_aggregate = torch.nn.functional.relu(torch.tensor(fs_aggregate)).type(torch.float32) 
+    fs_aggregate = torch.poisson(torch.tensor(fs_aggregate)).type(torch.float32) 
     return fs_aggregate
 
 def generate_sim_data_from_hdf5(prior: float) -> torch.float32:
@@ -431,19 +428,13 @@ class MMDLoss(nn.Module):
         YY = K[X_size:, X_size:].mean()
         return XX - 2 * XY + YY
 
-def calibration_kernel_2(z, target, lossfunc):
-
-    z2 = z/z.sum(dim=1)
-
-
-
 def main(argv):
 
     create_global_variables()
     set_reproducable_seed(FLAGS.seed)
-    get_sim_datafrom_hdf5('moments_msl_sfs_lof_hdf5_data.h5')
+    
     # Set uniform to [-5, -1e-4] selection < -5 is usually causes mutations to be at very low frequencies
-    high_param = 4 * torch.ones(1, device=the_device)
+    high_param = 5 * torch.ones(1, device=the_device)
     low_param = -6.0*torch.ones(1, device=the_device)
 
     ind_prior2 = MultipleIndependent(
@@ -458,46 +449,47 @@ def main(argv):
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
         #torch.distributions.Uniform(low=low_param, high=high_param),
         #torch.distributions.Uniform(low=low_param, high=high_param),
         #torch.distributions.Uniform(low=low_param, high=high_param),
@@ -507,8 +499,7 @@ def main(argv):
         #torch.distributions.Uniform(low=low_param, high=high_param),
         #torch.distributions.Uniform(low=low_param, high=high_param),
         #torch.distributions.Uniform(low=low_param, high=high_param),
-        #torch.distributions.Uniform(low=low_param, high=high_param),
-        torch.distributions.Uniform(low=torch.zeros(1, device=the_device), high=1*torch.ones(1,device=the_device)),
+        #torch.distributions.Uniform(low=torch.zeros(1, device=the_device), high=1*torch.ones(1,device=the_device)),
     ],
     validate_args=False,)
     # Set up prior and simulator for SBI
@@ -531,9 +522,8 @@ def main(argv):
     
     #true_x = load_true_data('emperical_missense_sfs_msl.npy', 0).unsqueeze(0)
     true_x = load_true_data('emperical_lof_sfs_msl.npy', 0).unsqueeze(0) + 1
-    norm_true_x = true_x/true_x.sum(dim=1)
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
-    path = "Experiments/saved_posteriors_msl_lof_scf_sinkhorn_{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
+    path = "Experiments/saved_posteriors_msl_lof_nsf_and_sink_ensebmle_lower_prior_params_{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
 
     # Train posterior
     print("Starting to Train")
@@ -541,103 +531,111 @@ def main(argv):
     mmdloss = MMDLoss().to(the_device)
     wassloss = SamplesLoss("energy", p=2, blur=0.05, scaling=0.8)
     sinkhorn = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8)
-    for i in range(0,rounds+1):
+    inferences = []
+    for j in range(0, num_ensemble):
+        if j > 1:
+            inferences.append(posterior_build)
+        for i in range(0,rounds+1):
 
-        theta = proposal.sample((50,))
+            theta = proposal.sample((300,))
 
-        x = simulate_in_batches(simulator, theta.to(the_device), num_workers=6, show_progress_bars=True)
-        print("Building density estimator fro round {}\n".format(i))
+            x = simulate_in_batches(simulator, theta, num_workers=1, show_progress_bars=True)
+            print("Building density estimator fro round {}\n".format(i))
 
-        if i == 0:
-            #calibration_kernel = lambda z: torch.log(torch.sum(torch.nn.functional.mse_loss(z, true_x.repeat(z.shape[0],1).to(the_device),reduction='none'),dim=1))
-            #calibration_kernel = lambda z: mmdloss(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
-            calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)) + torch.nn.functional.poisson_nll_loss(torch.log(z.unsqueeze(1)),torch.log(true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)))
-            infer_posterior.append_simulations(theta, x, data_device='cpu' ).train(learning_rate=5e-4, 
-                                                                                   training_batch_size=10, use_combined_loss=True, calibration_kernel=calibration_kernel, show_train_summary=False)
-        else:
-            # Now make calibration kernel based on the KL-Divergence between 1*/(tau) * (q(gamma|Simulated || q(gamma|Emperical)) where tau is a scaling parameter
-            with torch.no_grad():
-                #calibration_kernel = lambda z: wassloss(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
-                calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)) + torch.nn.functional.poisson_nll_loss(torch.log(z.unsqueeze(1)),torch.log(true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)))
-
-            infer_posterior.append_simulations(theta, x, proposal=posterior_build, data_device='cpu').train(num_atoms=2, force_first_round_loss=True, 
-                                                                                                            learning_rate=5e-4, training_batch_size=10, use_combined_loss=True, 
-                                                                                                            show_train_summary=False, calibration_kernel=calibration_kernel)
-
-        print("\n ****************************************** Building Posterior for round {} ******************************************.\n".format(i))
-
-        if i == 0:
-            #posterior parameters
-            base_dist = torch.distributions.Independent(
-                    torch.distributions.Normal(
-                        torch.zeros(ind_prior2._event_shape, device=the_device),
-                        torch.ones(ind_prior2._event_shape, device=the_device),
-                    ),
-                    1,
-                )
-       
-            vi_parameters = get_flow_builder("scf", batch_norm=False, base_dist = base_dist, permute = True, num_transforms=6,
-                                             hidden_dims= [128, 128], skip_connections=False, nonlinearity=nn.ReLU(), count_bins=8, order="linear", bound=8 )
-            posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": vi_parameters})
-        else:
-            posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": posterior_build})
-
-        print("Training to emperical observation")
-        # This proposal is used for Varitaionl inference posteior
-        posterior_build = posterior.set_default_x(true_x).train(n_particles=250, max_num_iters=250, quality_control=False, stick_the_landing=True)
-        psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
-        print(f"Psi Metric is {psi_metric} and ideally should be less than 0.5.")
-        accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-5, num_samples_to_estimate_support=100000)
-        proposal = RestrictedPrior(prior, accept_reject_fn, posterior_build, sample_with="sir", device=the_device)
-        # Save posters every some rounds
-        if i == 1:
-            if not (os.path.isdir(path)):
-                try:
-                    os.mkdir(path)
-                except OSError:
-                    print("Error in making directory")    
-        if i % 5 == 0 and i > 0:
-            print("Preparting to save posteriors")
-            if posterior_type == "VI":
-                # Save posteriors just in case
-                path1 = path+"/posterior_round_{}.pkl".format(i)
-                path3 = path+"/posterior_observed_round_{}.pkl".format(i)
-                with open(path1, "wb") as handle:
-                    temp = posterior
-                    post = get_state(temp)
-                    torch.save(post, handle)
-                with open(path3, "wb") as handle:
-                    temp2 = posterior_build
-                    post = get_state(temp2)
-                    torch.save(post, handle)
+            if i == 0:
+                #calibration_kernel = lambda z: torch.log(torch.sum(torch.nn.functional.mse_loss(z, true_x.repeat(z.shape[0],1).to(the_device),reduction='none'),dim=1))
+                #calibration_kernel = lambda z: mmdloss(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
+                calibration_kernel = lambda z: sinkhorn(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
+                infer_posterior.append_simulations(theta, x, data_device='cpu' ).train(learning_rate=5e-4, 
+                                                                                    training_batch_size=10, use_combined_loss=True, calibration_kernel=calibration_kernel, show_train_summary=False)
             else:
-                # Save posteriors just in case
-                path1 = path+"/posterior_round_{}.pkl".format(i)
-                path3 = path+"/posterior_observed_round_{}.pkl".format(i)
-                with open(path1, "wb") as handle:
-                    torch.save(posterior, handle)
-                with open(path3, "wb") as handle:
-                    torch.save(posterior_build, handle)
-        if i == rounds+1:
-            try:
-                path1 =path+"/inference_round_{}.pkl".format(i)
-                with open(path1, "wb") as handle:
-                    pickle.dump(infer_posterior, handle)
-            except Exception:
-                pass
-            
+                # Now make calibration kernel based on the KL-Divergence between 1*/(tau) * (q(gamma|Simulated || q(gamma|Emperical)) where tau is a scaling parameter
+                with torch.no_grad():
+                    #calibration_kernel = lambda z: wassloss(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
+                    calibration_kernel = lambda z: sinkhorn(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
 
+                infer_posterior.append_simulations(theta, x, proposal=posterior_build, data_device='cpu').train(num_atoms=2, force_first_round_loss=True, 
+                                                                                                                learning_rate=5e-4, training_batch_size=10, use_combined_loss=True, 
+                                                                                                                show_train_summary=False, calibration_kernel=calibration_kernel)
+
+            print("\n ****************************************** Building Posterior for round {} ******************************************.\n".format(i))
+
+            if i == 0:
+                #posterior parameters
+                base_dist = torch.distributions.Independent(
+                        torch.distributions.Normal(
+                            torch.zeros(ind_prior2._event_shape, device=the_device),
+                            torch.ones(ind_prior2._event_shape, device=the_device),
+                        ),
+                        1,
+                    )
+        
+                vi_parameters = get_flow_builder("scf", batch_norm=False, base_dist = base_dist, permute = True, num_transforms=6,
+                                                hidden_dims= [128, 128], skip_connections=False, nonlinearity=nn.ReLU(), count_bins=8, order="linear", bound=8 )
+                posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": vi_parameters})
+            else:
+                posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": posterior_build})
+
+            print("Training to emperical observation")
+            # This proposal is used for Varitaionl inference posteior
+            posterior_build = posterior.set_default_x(true_x).train(n_particles=250, max_num_iters=250, quality_control=False, stick_the_landing=True)
+            psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
+            print(f"Psi Metric is {psi_metric} and ideally should be less than 0.5.")
+            accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-5, num_samples_to_estimate_support=100000)
+            proposal = RestrictedPrior(prior, accept_reject_fn, posterior_build, sample_with="sir", device=the_device)
+            # Save posters every some rounds
+            if i == 1:
+                if not (os.path.isdir(path)):
+                    try:
+                        os.mkdir(path)
+                    except OSError:
+                        print("Error in making directory")    
+            if i % 5 == 0 and i > 0:
+                print("Preparting to save posteriors")
+                if posterior_type == "VI":
+                    # Save posteriors just in case
+                    path1 = path+"/posterior_round_{}.pkl".format(i)
+                    path3 = path+"/posterior_observed_round_{}.pkl".format(i)
+                    with open(path1, "wb") as handle:
+                        temp = posterior
+                        post = get_state(temp)
+                        torch.save(post, handle)
+                    with open(path3, "wb") as handle:
+                        temp2 = posterior_build
+                        post = get_state(temp2)
+                        torch.save(post, handle)
+                        del temp, temp2
+                else:
+                    # Save posteriors just in case
+                    path1 = path+"/posterior_round_{}.pkl".format(i)
+                    path3 = path+"/posterior_observed_round_{}.pkl".format(i)
+                    with open(path1, "wb") as handle:
+                        torch.save(posterior, handle)
+                    with open(path3, "wb") as handle:
+                        torch.save(posterior_build, handle)
+            if i == rounds+1:
+                try:
+                    path1 =path+"/inference_round_{}.pkl".format(i)
+                    with open(path1, "wb") as handle:
+                        pickle.dump(infer_posterior, handle)
+                except Exception:
+                    pass
             
-            print("\n ****************************************** Saved Posterior for round {} ******************************************.\n".format(i))
+                
+
+                
+                print("\n ****************************************** Saved Posterior for round {} ******************************************.\n".format(i))
 
     # Save posteriors and proposals for later use
 
-    print("Finished Training posterior and prior")
+    print("Finished Training posterior and prior, creating ensemble")
+    inferences.append(posterior_build)
+    
     #torch.cuda.cudart().cudaProfilerStop()
 
 
     ### Currently saving objects does not seem to work for all posteriors/samplers (SRI, restricted estimator)
-    '''
+
     # save Last posterior and observed posterior
     if posterior_type=='VI':
         path1 = path+"/posterior_last_round.pkl"
@@ -650,7 +648,7 @@ def main(argv):
         
         # Can just re-estimate Restricted prior using sampling instead of saving
         # because it cannot save a copy of the get_density_thresholder function
-        
+        '''
         try:
             with open(path2, "wb") as handle:
                 torch.save(proposals[i], handle)
@@ -658,7 +656,7 @@ def main(argv):
             if i == 1:
                 print("Cannot save proposal distributions")
             os.remove(path2)
-        
+        '''
         with open(path3, "wb") as handle:
             post = get_state(posterior_build)
             torch.save(post, handle)
@@ -676,6 +674,13 @@ def main(argv):
             pickle.dump(infer_posterior, handle)
     except Exception:
         pass
-    '''
+
+    if (posterior_type=='VI') and (inferences not None):
+        post2 = []
+        for post in inferences:
+            post2.append(get_state(post))
+
+            
+    
 if __name__ == '__main__':
     app.run(main)
