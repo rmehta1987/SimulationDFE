@@ -444,16 +444,62 @@ def calibration_kernel_2(predicted, true_x, target, lossfunc):
     predicted = predicted.exp()
     norm_predicted = (predicted/predicted.sum(dim=1).view(predicted.shape[0],1)).unsqueeze(1)
     loss = lossfunc(norm_predicted, target.repeat(predicted.shape[0],1).to(the_device).unsqueeze(1))
-    trun_idx = torch.gt(loss, 0.2*torch.ones_like(loss))
-    loss[trun_idx] = torch.tensor([0.0], dtype=torch.float32, device=loss.device)
-
+    
+   
     return loss
 
-def pre_process_theta(prior):
+def restricted_simulations(proposal, true_x, simulator, sample_size=300, oversampling_factor=None):
+    """restrict simulatins to be in a squared distance between true and simulated
 
-    for a_prior in prior:
-        fs = generate_sim_data_only_one
+    Args:
+        theta (_type_): proposed selection coefficients
+        predicted (_type_): simulated sfs
+        true_x (_type_): emperical sfs
+    """    
+
+     #calculate l2 distance between predicted and true for the first 10 bins
+    rerun = True
+    truex10 = true_x[0,:10].unsqueeze(0)
+    new_predicted = []
+    new_theta = []
+    rerun_counter = 0
+    fail = False
+    while rerun:
         
+        if not oversampling_factor:
+            theta = proposal.sample((10000,))
+        else:
+            theta = proposal.sample((10000,),oversampling_factor=oversampling_factor)
+        #new_predicted = []
+        predicted = simulate_in_batches(simulator, theta.to(the_device), num_workers=1, show_progress_bars=True)
+        predicted10 = predicted[:,:10].exp()
+        
+        rmse = torch.nn.functional.mse_loss(predicted10.unsqueeze(1), truex10.repeat(predicted10.shape[0],1).to(the_device).unsqueeze(1),reduction='none')
+        rmse = torch.sqrt(torch.mean(rmse,dim=2))
+        trun_idx = torch.lt(rmse, 200.0*torch.ones_like(rmse)).squeeze(1)
+        temp_theta = theta[trun_idx]
+        temp_predicted = predicted[trun_idx]
+        new_predicted.append(temp_predicted)
+        new_theta.append(temp_theta)
+        x = torch.cat(new_predicted, dim=0)
+        if x.shape[0] >= sample_size:
+            rerun = False
+        else:
+            rerun_counter += 1
+            if rerun_counter > 5:
+                fail=True
+                print("Can't find good samples, rebuilding posterior")
+                break
+        print("Rerunning current, current shape of accepted simulations: {}".format(x.shape[0]))
+    
+    if not fail:
+        good_theta = torch.cat(new_theta, dim=0)
+        return fail, good_theta, x
+    else:
+        return fail, None, None
+
+    
+
 
 def main(argv):
 
@@ -472,12 +518,13 @@ def main(argv):
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
-        torch.distributions.Uniform(low=low_param, high=high_param),
-        torch.distributions.Uniform(low=low_param, high=high_param),
-        torch.distributions.Uniform(low=low_param, high=high_param),
-        torch.distributions.Uniform(low=low_param, high=high_param),
-        torch.distributions.Uniform(low=low_param, high=high_param),
-        torch.distributions.Uniform(low=low_param, high=high_param),
+        #torch.distributions.Uniform(low=low_param, high=high_param),
+        #torch.distributions.Uniform(low=low_param, high=high_param),
+        #torch.distributions.Uniform(low=low_param, high=high_param),
+        #torch.distributions.Uniform(low=low_param, high=high_param),
+        #torch.distributions.Uniform(low=low_param, high=high_param),
+        #torch.distributions.Uniform(low=low_param, high=high_param),
+        #torch.distributions.Uniform(low=low_param, high=high_param),
         # torch.distributions.Uniform(low=low_param, high=high_param),
         # torch.distributions.Uniform(low=low_param, high=high_param),
         # torch.distributions.Uniform(low=low_param, high=high_param),
@@ -564,11 +611,14 @@ def main(argv):
     sinkhorn = SamplesLoss("sinkhorn", p=2, blur=0.2, scaling=0.99)
     for i in range(0,rounds+1):
         if i == 0:
-            theta = proposal.sample((150,))
+            #theta = proposal.sample((2000,))
+            fail, theta, x = restricted_simulations(proposal, true_x, simulator)
         else:
-            theta = proposal.sample((150,), oversampling_factor=1024)
+            fail, theta, x = restricted_simulations(proposal, true_x, simulator, oversampling_factor=1024)
+        
+        #x = simulate_in_batches(simulator, theta.to(the_device), num_workers=1, show_progress_bars=True)
 
-        x = simulate_in_batches(simulator, theta.to(the_device), num_workers=1, show_progress_bars=True)
+        
         print("Building density estimator for round {}\n".format(i))
 
         if i == 0:
@@ -580,8 +630,7 @@ def main(argv):
                 calibration_kernel = lambda z: calibration_kernel_2(z, true_x, norm_true_x, sinkhorn)
             infer_posterior.append_simulations(theta, x, data_device='cpu' ).train(learning_rate=5e-4, 
                                                                                    training_batch_size=30, use_combined_loss=True, calibration_kernel=calibration_kernel, show_train_summary=False)
-        else:
-            # Now make calibration kernel based on the KL-Divergence between 1*/(tau) * (q(gamma|Simulated || q(gamma|Emperical)) where tau is a scaling parameter
+        if i > 1 and not fail:
             with torch.no_grad():
                 #calibration_kernel = lambda z: wassloss(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
                 #calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)) + torch.nn.functional.poisson_nll_loss(z.unsqueeze(1),true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
@@ -591,8 +640,12 @@ def main(argv):
             infer_posterior.append_simulations(theta, x, proposal=posterior_build, data_device='cpu').train(num_atoms=2, force_first_round_loss=True, 
                                                                                                             learning_rate=5e-4, training_batch_size=30, use_combined_loss=True, 
                                                                                                             show_train_summary=False, calibration_kernel=calibration_kernel)
+            retrain_flag = False
+        if not fail:
+            print("\n ****************************************** Building Posterior for round {} ******************************************.\n".format(i))
+            print("\n ****************************************** Rebuilding Posterior for round {} ******************************************.\n".format(i))
+        else:
 
-        print("\n ****************************************** Building Posterior for round {} ******************************************.\n".format(i))
 
         if i == 0:
             #posterior parameters
@@ -610,12 +663,18 @@ def main(argv):
             #                                 hidden_dims= [128, 128], skip_connections=False, nonlinearity=nn.ReLU(), count_bins=8, order="linear", bound=8 )
             
             posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": vi_parameters})
+            posterior_build = posterior.set_default_x(log_true_x).train(n_particles=200, max_num_iters=250, quality_control=False, stick_the_landing=True, alpha=0.5, unbiased=True, dreg=True)
+
+        if i > 1 and fail:
+            posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": vi_parameters})
+            posterior_build = posterior.set_default_x(log_true_x).train(n_particles=500, retrain_from_scratch=True, max_num_iters=250, quality_control=False, stick_the_landing=True, alpha=0.5, unbiased=True, dreg=True)
         else:
             posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": posterior_build})
+            posterior_build = posterior.set_default_x(log_true_x).train(n_particles=200, max_num_iters=250, quality_control=False, stick_the_landing=True, alpha=0.5, unbiased=True, dreg=True)
 
         print("Training to emperical observation")
         # This proposal is used for Varitaionl inference posteior
-        posterior_build = posterior.set_default_x(log_true_x).train(n_particles=200, max_num_iters=250, quality_control=False, stick_the_landing=True, alpha=0.5, unbiased=True, dreg=True)
+        
         psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
         print(f"Psi Metric is {psi_metric} and ideally should be less than 0.5.")
         if i == 1:

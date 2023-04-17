@@ -296,8 +296,14 @@ def calibration_kernel_2(predicted, true_x, target, lossfunc):
     predicted = predicted.exp()
     norm_predicted = (predicted/predicted.sum(dim=1).view(predicted.shape[0],1)).unsqueeze(1)
     loss = lossfunc(norm_predicted, target.repeat(predicted.shape[0],1).to(the_device).unsqueeze(1))
-    #trun_idx = torch.gt(loss, 0.2*torch.ones_like(loss))
-    #loss[trun_idx] = torch.tensor([0.0], dtype=torch.float32, device=loss.device)
+
+    # #calculate l2 distance between predicted and true for the first 10 bins
+    # predicted10 = predicted[:,:10]
+    # truex10 = true_x[:10]
+    # rmse = torch.nn.functional.mse_loss(predicted10, truex10.repeat(predicted.shape[0],1).to(the_device).unsqueeze(1),reduction='none')
+    # rmse = torch.sqrt(torch.mean(rmse,dim=1))
+    # trun_idx = torch.lt(rmse, 500.0*torch.ones_like(rmse))
+    # loss[trun_idx] = torch.tensor([0.0], dtype=torch.float32, device=loss.device)
     return loss
 
 @atexit.register
