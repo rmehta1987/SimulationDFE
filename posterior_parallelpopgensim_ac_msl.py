@@ -57,7 +57,7 @@ flags.DEFINE_integer('num_blocks', 16, "How many blocks for sparse matrix")
 flags.DEFINE_integer('num_bins', 8, "How many bins to use for rational spline normalizing flows")
 
 flags.DEFINE_float('dropout_probability', 0.1, "Dropout probability")
-flags.DEFINE_float('tail_bound', 3.0, "Bound for each spline only for spline flows")
+flags.DEFINE_float('tail_bound', 8.0, "Bound for each spline only for spline flows")
 
 # String Flags
 flags.DEFINE_string('the_device', 'cuda', 'Whether to use CUDA or CPU')
@@ -234,10 +234,27 @@ def ImportanceSamplingEstimator(num_particles, sample, target, threshold, propos
     
 def generate_sim_data(prior: float) -> torch.float32:
 
-    _, idx = loaded_tree.query(prior.cpu().numpy(), k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
-    data = loaded_file[loaded_file_keys[idx[0]]]
+    data = np.zeros((sample_size*2-1))
+    theprior = prior[:-1] # last dim is misidentification
+    #theprior=prior
+    #mis_id = prior[-1].cpu().numpy()
+    mis_id=0
+    for a_prior in theprior:
+        _, idx = loaded_tree.query(a_prior.cpu().numpy(), k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
+        fs = loaded_file[loaded_file_keys[idx[0]]][:]*1164.3148344084038 # lof scaling parameter
+        fs = (1 - mis_id)*fs + mis_id * fs[::-1]
+        data += fs 
+    data /= theprior.shape[0]
+    return torch.log(torch.nn.functional.relu(torch.tensor(data, device=the_device)).type(torch.float32))
 
-    return torch.poisson(torch.tensor(data, device=the_device)).type(torch.float32)
+def generate_sim_data_only_one(prior: float) -> torch.float32:
+
+    theprior=prior
+
+    _, idx = loaded_tree.query(theprior.cpu().numpy(), k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
+    fs = loaded_file[loaded_file_keys[idx[0]]][:]*1164.3148344084038 # lof scaling parameter
+  
+    return torch.log(torch.nn.functional.relu(torch.tensor(fs, device=the_device)).type(torch.float32))
 
 def change_out_of_distance_proposals(prior: float):
      
@@ -280,7 +297,7 @@ def generate_moments_sim_data(prior: float) -> torch.float32:
             fs.integrate([opt_params[0]], opt_params[2], gamma=gamma, h=h)
             nu_func = lambda t: [opt_params[0] * np.exp(
                 np.log(opt_params[1] / opt_params[0]) * t / opt_params[3])]
-            fs.integrate(nu_func, opt_params[3], gamma=gamma, h=h)
+            fs.integrate(nu_func, opt_params[3], gamma=gamma, h=h) 
             if abs(np.max(fs)) > 10 or np.any(np.isnan(fs)):
                 # large gamma-values can require large sample sizes for stability
                 rerun = True
@@ -345,15 +362,6 @@ def generate_moments_sim_data2(prior: float) -> torch.float32:
     fs_aggregate /= gammas.shape[0]
     fs_aggregate = torch.nn.functional.relu(torch.tensor(fs_aggregate)).type(torch.float32) 
     return fs_aggregate
-
-def generate_sim_data_from_hdf5(prior: float) -> torch.float32:
-
-    _, idx = loaded_tree.query(prior.cpu().numpy(), k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
-    
-    data = loaded_file[loaded_file_keys[idx[0]]][:]
-
-    #return torch.cat([torch.poisson(torch.tensor(data, device=the_device)).type(torch.float32), torch.tensor([0.0],device=the_device)])
-    return torch.poisson(torch.tensor(data, device=the_device)).type(torch.float32)
 
 
 def true_sqldata_to_numpy(a_path: str, save_as: str):
@@ -431,11 +439,21 @@ class MMDLoss(nn.Module):
         YY = K[X_size:, X_size:].mean()
         return XX - 2 * XY + YY
 
-def calibration_kernel_2(z, target, lossfunc):
+def calibration_kernel_2(predicted, true_x, target, lossfunc):
+    #lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
+    predicted = predicted.exp()
+    norm_predicted = (predicted/predicted.sum(dim=1).view(predicted.shape[0],1)).unsqueeze(1)
+    loss = lossfunc(norm_predicted, target.repeat(predicted.shape[0],1).to(the_device).unsqueeze(1))
+    trun_idx = torch.gt(loss, 0.2*torch.ones_like(loss))
+    loss[trun_idx] = torch.tensor([0.0], dtype=torch.float32, device=loss.device)
 
-    z2 = z/z.sum(dim=1)
+    return loss
 
+def pre_process_theta(prior):
 
+    for a_prior in prior:
+        fs = generate_sim_data_only_one
+        
 
 def main(argv):
 
@@ -443,7 +461,7 @@ def main(argv):
     set_reproducable_seed(FLAGS.seed)
     get_sim_datafrom_hdf5('moments_msl_sfs_lof_hdf5_data.h5')
     # Set uniform to [-5, -1e-4] selection < -5 is usually causes mutations to be at very low frequencies
-    high_param = 4 * torch.ones(1, device=the_device)
+    high_param = 4.0 * torch.ones(1, device=the_device)
     low_param = -6.0*torch.ones(1, device=the_device)
 
     ind_prior2 = MultipleIndependent(
@@ -458,8 +476,8 @@ def main(argv):
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
-        # torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
+        torch.distributions.Uniform(low=low_param, high=high_param),
         # torch.distributions.Uniform(low=low_param, high=high_param),
         # torch.distributions.Uniform(low=low_param, high=high_param),
         # torch.distributions.Uniform(low=low_param, high=high_param),
@@ -508,19 +526,20 @@ def main(argv):
         #torch.distributions.Uniform(low=low_param, high=high_param),
         #torch.distributions.Uniform(low=low_param, high=high_param),
         #torch.distributions.Uniform(low=low_param, high=high_param),
-        torch.distributions.Uniform(low=torch.zeros(1, device=the_device), high=1*torch.ones(1,device=the_device)),
+        #torch.distributions.Uniform(low=torch.zeros(1, device=the_device), high=1*torch.ones(1,device=the_device)),
     ],
     validate_args=False,)
     # Set up prior and simulator for SBI
     #prior, num_parameters, prior_returns_numpy = process_prior(box_uniform_prior)
     prior, num_parameters, prior_returns_numpy = process_prior(ind_prior2)
+    #simulator = process_simulator(generate_moments_sim_data2, prior, prior_returns_numpy)
+    simulator = process_simulator(generate_sim_data, prior, prior_returns_numpy)
 
-    simulator = process_simulator(generate_moments_sim_data2, prior, prior_returns_numpy)
 
     #simulator = generate_moments_sim_data
     # First learn posterior
     print("Setting up posteriors")
-    density_estimator_function = posterior_nn(model="nsf", hidden_features=num_hidden, num_transforms=number_of_transforms, num_bins=num_bins, tail_bound=tail_bound, 
+    density_estimator_function = posterior_nn(model="nsf", hidden_features=128, num_transforms=number_of_transforms, num_bins=num_bins, tail_bound=tail_bound, 
                                               dropout_probability=dropout_probability)
 
     infer_posterior = SNPE(prior, show_progress_bars=True, device=the_device, density_estimator=density_estimator_function)
@@ -530,38 +549,47 @@ def main(argv):
 
     
     #true_x = load_true_data('emperical_missense_sfs_msl.npy', 0).unsqueeze(0)
-    true_x = load_true_data('emperical_lof_sfs_msl.npy', 0).unsqueeze(0) + 1
-    norm_true_x = true_x/true_x.sum(dim=1)
+    true_x = load_true_data('emperical_lof_sfs_msl.npy', 0).unsqueeze(0)
+    log_true_x = torch.log(true_x + 1)
+    log_norm_true_x = log_true_x/log_true_x.sum(dim=1)
+    norm_true_x = true_x/true_x.sum()
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
-    path = "Experiments/saved_posteriors_msl_lof_scf_sinkhorn_{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
+    path = "Experiments/saved_posteriors_msl_lof_scf_sinkhorn_12_pmsid_and_optimizer_{}".format(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
 
     # Train posterior
     print("Starting to Train")
-    #calibration_kernel = lambda z: torch.log(torch.sum(torch.nn.functional.mse_loss(z, true_x.repeat(z.shape[0],1).to(the_device),reduction='none'),dim=1))
-    mmdloss = MMDLoss().to(the_device)
-    wassloss = SamplesLoss("energy", p=2, blur=0.05, scaling=0.8)
-    sinkhorn = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.8)
+    
+    #mmdloss = MMDLoss().to(the_device)
+    #wassloss = SamplesLoss("energy", p=2, blur=0.05, scaling=0.8)
+    sinkhorn = SamplesLoss("sinkhorn", p=2, blur=0.2, scaling=0.99)
     for i in range(0,rounds+1):
+        if i == 0:
+            theta = proposal.sample((150,))
+        else:
+            theta = proposal.sample((150,), oversampling_factor=1024)
 
-        theta = proposal.sample((50,))
-
-        x = simulate_in_batches(simulator, theta.to(the_device), num_workers=6, show_progress_bars=True)
-        print("Building density estimator fro round {}\n".format(i))
+        x = simulate_in_batches(simulator, theta.to(the_device), num_workers=1, show_progress_bars=True)
+        print("Building density estimator for round {}\n".format(i))
 
         if i == 0:
             #calibration_kernel = lambda z: torch.log(torch.sum(torch.nn.functional.mse_loss(z, true_x.repeat(z.shape[0],1).to(the_device),reduction='none'),dim=1))
             #calibration_kernel = lambda z: mmdloss(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
-            calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)) + torch.nn.functional.poisson_nll_loss(torch.log(z.unsqueeze(1)),torch.log(true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)))
+            with torch.no_grad():
+                #calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)) + torch.nn.functional.poisson_nll_loss(z.unsqueeze(1),true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
+                #calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
+                calibration_kernel = lambda z: calibration_kernel_2(z, true_x, norm_true_x, sinkhorn)
             infer_posterior.append_simulations(theta, x, data_device='cpu' ).train(learning_rate=5e-4, 
-                                                                                   training_batch_size=10, use_combined_loss=True, calibration_kernel=calibration_kernel, show_train_summary=False)
+                                                                                   training_batch_size=30, use_combined_loss=True, calibration_kernel=calibration_kernel, show_train_summary=False)
         else:
             # Now make calibration kernel based on the KL-Divergence between 1*/(tau) * (q(gamma|Simulated || q(gamma|Emperical)) where tau is a scaling parameter
             with torch.no_grad():
                 #calibration_kernel = lambda z: wassloss(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
-                calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)) + torch.nn.functional.poisson_nll_loss(torch.log(z.unsqueeze(1)),torch.log(true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)))
+                #calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)) + torch.nn.functional.poisson_nll_loss(z.unsqueeze(1),true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
+                #calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
+                calibration_kernel = lambda z: calibration_kernel_2(z, true_x, norm_true_x, sinkhorn)
 
             infer_posterior.append_simulations(theta, x, proposal=posterior_build, data_device='cpu').train(num_atoms=2, force_first_round_loss=True, 
-                                                                                                            learning_rate=5e-4, training_batch_size=10, use_combined_loss=True, 
+                                                                                                            learning_rate=5e-4, training_batch_size=30, use_combined_loss=True, 
                                                                                                             show_train_summary=False, calibration_kernel=calibration_kernel)
 
         print("\n ****************************************** Building Posterior for round {} ******************************************.\n".format(i))
@@ -570,32 +598,51 @@ def main(argv):
             #posterior parameters
             base_dist = torch.distributions.Independent(
                     torch.distributions.Normal(
-                        torch.zeros(ind_prior2._event_shape, device=the_device),
-                        torch.ones(ind_prior2._event_shape, device=the_device),
+                        0.0*torch.ones(ind_prior2._event_shape, device=the_device),
+                        1.0*torch.ones(ind_prior2._event_shape, device=the_device),
                     ),
                     1,
                 )
        
             vi_parameters = get_flow_builder("scf", batch_norm=False, base_dist = base_dist, permute = True, num_transforms=6,
                                              hidden_dims= [128, 128], skip_connections=False, nonlinearity=nn.ReLU(), count_bins=8, order="linear", bound=8 )
+            #vi_parameters = get_flow_builder(num_components=4, transform="scf", batch_norm=False, base_dist = base_dist, permute = True, num_transforms=6,
+            #                                 hidden_dims= [128, 128], skip_connections=False, nonlinearity=nn.ReLU(), count_bins=8, order="linear", bound=8 )
+            
             posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": vi_parameters})
         else:
             posterior = infer_posterior.build_posterior(sample_with = "vi", vi_method="fKL", vi_parameters={"q": posterior_build})
 
         print("Training to emperical observation")
         # This proposal is used for Varitaionl inference posteior
-        posterior_build = posterior.set_default_x(true_x).train(n_particles=250, max_num_iters=250, quality_control=False, stick_the_landing=True)
+        posterior_build = posterior.set_default_x(log_true_x).train(n_particles=200, max_num_iters=250, quality_control=False, stick_the_landing=True, alpha=0.5, unbiased=True, dreg=True)
         psi_metric = posterior_build.evaluate2(quality_control_metric= "psis", N=200)
         print(f"Psi Metric is {psi_metric} and ideally should be less than 0.5.")
-        accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-5, num_samples_to_estimate_support=100000)
-        proposal = RestrictedPrior(prior, accept_reject_fn, posterior_build, sample_with="sir", device=the_device)
-        # Save posters every some rounds
         if i == 1:
             if not (os.path.isdir(path)):
                 try:
                     os.mkdir(path)
                 except OSError:
                     print("Error in making directory")    
+        if psi_metric < 2.0 and i >= 1:
+            # Save posteriors just in case
+            print("PSI metric was really good! Preparting to save posteriors")
+            path1 = path+"/posterior_round_{}.pkl".format(i)
+            path3 = path+"/posterior_observed_round_{}.pkl".format(i)
+            with open(path1, "wb") as handle:
+                temp = posterior
+                post = get_state(temp)
+                torch.save(post, handle)
+            with open(path3, "wb") as handle:
+                temp2 = posterior_build
+                post = get_state(temp2)
+                torch.save(post, handle)
+
+        
+        accept_reject_fn = get_density_thresholder(posterior_build, quantile=1e-5, num_samples_to_estimate_support=100000)
+        proposal = RestrictedPrior(prior, accept_reject_fn, posterior_build, sample_with="sir", device=the_device)
+        # Save posters every some rounds
+        
         if i % 5 == 0 and i > 0:
             print("Preparting to save posteriors")
             if posterior_type == "VI":
@@ -618,7 +665,7 @@ def main(argv):
                     torch.save(posterior, handle)
                 with open(path3, "wb") as handle:
                     torch.save(posterior_build, handle)
-        if i == rounds+1:
+        if i == rounds:
             try:
                 path1 =path+"/inference_round_{}.pkl".format(i)
                 with open(path1, "wb") as handle:
