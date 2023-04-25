@@ -610,10 +610,10 @@ class ForwardKLOptimizer(DivergenceOptimizer):
             Tuple[Tensor, Tensor]: Surrogate loss to differentiate and to display.
 
         """
-        accept_reject_fn = get_density_thresholder(self.q, quantile=1e-5, num_samples_to_estimate_support=100000)
-        proposal = RestrictedPrior(self.prior, accept_reject_fn, self.q, sample_with="sir", device=self.device)
-        #samples = self.q.sample((self.n_particles,))
-        samples = proposal.sample((self.n_particles,))
+        #accept_reject_fn = get_density_thresholder(self.q, quantile=1e-5, num_samples_to_estimate_support=100000)
+        #proposal = RestrictedPrior(self.prior, accept_reject_fn, self.q, sample_with="sir", device=self.device)
+        samples = self.q.sample((self.n_particles,))
+        #samples = proposal.sample((self.n_particles,))
         if hasattr(self.q, "clear_cache"):
             self.q.clear_cache()
         logq = self.q.log_prob(samples)
