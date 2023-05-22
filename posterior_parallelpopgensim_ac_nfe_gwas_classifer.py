@@ -434,7 +434,6 @@ def main(argv):
 
     high_param = 0.0 * torch.ones(1, device=the_device)
     low_param = -7*torch.ones(1, device=the_device)
-    simple_prior = torch.distributions.Uniform(low=low_param, high=high_param)
     batch_size=20
 
     ind_prior = MultipleIndependent(
@@ -517,6 +516,7 @@ def main(argv):
     true_x = (load_true_data('emperical_standiing_height_gwas.npy' , 0)).unsqueeze(0) #[row, col] = [0, min_freq:sample_size*2-1]
     true_x = true_x[0, min_freq:]
     embedding_net = SummaryNet(true_x.shape[0], [32, 32, 16]).to(the_device)
+    embedding_true_x = embedding_net(true_x.unsqueeze(0).to(the_device)) # shoudl be of shape batch size x 1 x sample-sze
     embedding_true_x_norm = (embedding_true_x.squeeze(1)/embedding_true_x.squeeze(1).sum()).unsqueeze(1)
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
 
