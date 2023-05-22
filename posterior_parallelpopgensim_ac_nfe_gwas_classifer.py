@@ -47,7 +47,7 @@ FLAGS = flags.FLAGS
 logging.getLogger('matplotlib').setLevel(logging.ERROR) # See: https://github.com/matplotlib/matplotlib/issues/14523
 
 # Integer Flags
-flags.DEFINE_integer('sample_size', 55855, 'Diploid Population Sample Size where N is the number of diploids') # should be 55855
+flags.DEFINE_integer('sample_size', 360388, 'Diploid Population Sample Size where N is the number of diploids') # should be 55855
 flags.DEFINE_integer('num_hidden',256, "Number of hidden layers in normalizing flow architecture")
 flags.DEFINE_integer('num_sim', 200, 'How many simulations to run')
 flags.DEFINE_integer('rounds', 15, 'How many round of simulations to run, (total simulations = num_sim*rounds')
@@ -172,12 +172,12 @@ def aggregated_generate_sim_data(prior: float) -> torch.float32:
     theprior = prior[:-1] # last dim is misidentification
     gammas = -1*10**(theprior.cpu().numpy().squeeze())
 
-    mis_id=0
+    mis_id=prior[-1]
     for a_prior in gammas:
         _, idx = loaded_tree.query(a_prior, k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
         fs = loaded_file[loaded_file_keys[idx[0]]][:]
-        fs = (1 - mis_id)*fs + mis_id * fs[::-1]
-        fs = fs*.01552243512  # scale to lof theta
+        #fs = (1 - mis_id)*fs + mis_id * fs[::-1]
+        fs = fs*mis_id # scale to lof theta
         data += fs
     data /= theprior.shape[0]
     return torch.log(torch.nn.functional.relu(torch.tensor(data)+1).type(torch.float32))
@@ -428,12 +428,12 @@ def main(argv):
     set_reproducable_seed(FLAGS.seed)
 
     # sets up cached simulated data to read from hdf5 file
-    get_sim_datafrom_hdf5('chr10_sim_genome_wide_mut_sfs.h5')
+    get_sim_datafrom_hdf5('chr10_sim_genome_wide_mut_sfs_gwas.h5')
     print("Finished Loading Dataset")
 
 
     high_param = 0.0 * torch.ones(1, device=the_device)
-    low_param = -8*torch.ones(1, device=the_device)
+    low_param = -7*torch.ones(1, device=the_device)
     simple_prior = torch.distributions.Uniform(low=low_param, high=high_param)
     batch_size=20
 
@@ -499,7 +499,7 @@ def main(argv):
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
-        #torch.distributions.Uniform(low=torch.zeros(1, device=the_device), high=1*torch.ones(1,device=the_device)),
+        torch.distributions.Uniform(low=low_param, high=high_param),
     ],
     validate_args=False,)
     # Set up prior and simulator for SBI
@@ -512,17 +512,16 @@ def main(argv):
 
     print("Creating embedding network")
 
-    embedding_net = SummaryNet(sample_size*2-1, [32, 32, 16]).to(the_device)
+    min_freq = sample_size*2*(0.1/100) # cut_off frequency
 
-
-    true_x = (load_true_data('emperical_lof_sfs_nfe.npy', 0)).unsqueeze(0)
-    embedding_true_x = embedding_net(true_x.unsqueeze(0).to(the_device)) # shoudl be of shape batch size x 1 x sample-sze
+    true_x = (load_true_data('emperical_standiing_height_gwas.npy' , 0)).unsqueeze(0) #[row, col] = [0, min_freq:sample_size*2-1]
+    true_x = true_x[0, min_freq:]
+    embedding_net = SummaryNet(true_x.shape[0], [32, 32, 16]).to(the_device)
     embedding_true_x_norm = (embedding_true_x.squeeze(1)/embedding_true_x.squeeze(1).sum()).unsqueeze(1)
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
 
 
     print("Starting to Train")
-
     sinkhorn = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.99)
     estimator_round = 200
     load_classifier=False
@@ -536,13 +535,11 @@ def main(argv):
     # First created restricted estimator
 
     rmin = np.median(nmin) # get the min from initial simulations
-    #rmin=1.76
-
+    '''
     restriction_estimator = RestrictionEstimator(prior=ind_prior, decision_criterion="nan", device=the_device)
     if load_classifier:
         restriction_estimator = torch.load('nfe_restriction_classifier_lof_embedding_genome_wide.pkl')
         proposal = restriction_estimator.restrict_prior(allowed_false_negatives=0.0)
-
 
     else:
         for i in tqdm(range(0,estimator_round)):
@@ -568,6 +565,6 @@ def main(argv):
 
     print("Finsished")
 
-
+    '''
 if __name__ == '__main__':
     app.run(main)
