@@ -177,7 +177,7 @@ def aggregated_generate_sim_data(prior: float) -> torch.float32:
         _, idx = loaded_tree.query(a_prior, k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
         fs = loaded_file[loaded_file_keys[idx[0]]][:]
         fs = (1 - mis_id)*fs + mis_id * fs[::-1]
-        fs = fs*.01552243512  # scale to lof theta
+        fs = fs*.2077370846  # scale to missense theta
         data += fs
     data /= theprior.shape[0]
     return torch.log(torch.nn.functional.relu(torch.tensor(data)+1).type(torch.float32))
@@ -563,7 +563,7 @@ def main(argv):
         restriction_estimator._x_roundwise = None # too save memory
         save_estimator = deepcopy(restriction_estimator)
         save_estimator._build_nn=None
-        torch.save(save_estimator, 'nfe_restriction_classifier_lof_embedding_genome_wide_fixed_theta.pkl')
+        torch.save(save_estimator, 'nfe_restriction_classifier_mis_embedding_genome_wide.pkl')
         del save_estimator
 
     print("Finsished")

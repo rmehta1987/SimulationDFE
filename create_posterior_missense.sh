@@ -1,12 +1,12 @@
 #!/bin/bash
 
-#SBATCH --job-name=missense
+#SBATCH --job-name=mispost
 #SBATCH --account=pi-jjberg
 #SBATCH --partition=gpu
-#SBATCH --time=16:00:00
+#SBATCH --time=24:00:00
 #SBATCH --gres=gpu:1
-#SBATCH --mem=16G
-#SBATCH --output=posterior_missense.out
+#SBATCH --mem=32G
+#SBATCH --output=posterior_mis.out
 # TO USE V100 specify --constraint=v100
 # TO USE RTX600 specify --constraint=rtx6000
 #******SBATCH --constraint=v100   # constraint job runs on V100 GPU use
@@ -19,4 +19,4 @@ module load python
 
 source SFS/bin/activate
 
-python posterior_parallelpopgensim_ac_nfe_missense_sparse.py
+python posterior_parallelpopgensim_ac_nfe_mis_classifier.py

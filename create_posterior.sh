@@ -1,12 +1,12 @@
 #!/bin/bash
 
-#SBATCH --job-name=post2
+#SBATCH --job-name=post
 #SBATCH --account=pi-jjberg
 #SBATCH --partition=gpu
-#SBATCH --time=19:00:00
+#SBATCH --time=24:00:00
 #SBATCH --gres=gpu:1
-#SBATCH --mem=18G
-#SBATCH --output=posterior_lof.out
+#SBATCH --mem=32G
+#SBATCH --output=posterior_lof_median.out
 # TO USE V100 specify --constraint=v100
 # TO USE RTX600 specify --constraint=rtx6000
 #******SBATCH --constraint=v100   # constraint job runs on V100 GPU use
@@ -19,4 +19,4 @@ module load python
 
 source SFS/bin/activate
 
-python posterior_parallelpopgensim_ac_nfe_lof_sparse.py
+python posterior_parallelpopgensim_ac_nfe_lof_classifier.py

@@ -2,9 +2,8 @@
 
 #SBATCH --job-name=cdata
 #SBATCH --account=pi-jjberg
-#SBATCH --partition=gpu
+#SBATCH --partition=caslake
 #SBATCH --time=12:00:00
-#SBATCH --gres=gpu:1
 #SBATCH --mem=18G
 #SBATCH --output=create_dataset.out
 # TO USE V100 specify --constraint=v100
