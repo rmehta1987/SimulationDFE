@@ -173,13 +173,12 @@ def aggregated_generate_sim_data(prior: float) -> torch.float32:
     gammas = 10**(theprior.cpu().numpy().squeeze())
 
     scaling_theta=prior[-1].cpu().numpy()
-    numskipped=0
     for a_prior in gammas:
         _, idx = loaded_tree.query(a_prior, k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
         fs = loaded_file[loaded_file_keys[idx[0]]][:]
         fs = fs*(10**scaling_theta) # scale to gwas theta rate
         data += fs
-    data = data /(theprior.shape[0]-numskipped)
+    data = data /(theprior.shape[0])
     return torch.log(torch.nn.functional.relu(torch.tensor(data)+1).type(torch.float32))
 
 
