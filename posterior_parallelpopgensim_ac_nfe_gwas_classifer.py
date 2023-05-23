@@ -170,17 +170,22 @@ def aggregated_generate_sim_data(prior: float) -> torch.float32:
 
     data = np.zeros((sample_size*2-1))
     theprior = prior[:-1] # last dim is misidentification
-    gammas = -1*10**(theprior.cpu().numpy().squeeze())
+    gammas = 10**(theprior.cpu().numpy().squeeze())
 
-    mis_id=prior[-1]
+    mis_id=prior[-1].cpu().numpy()
     for a_prior in gammas:
         _, idx = loaded_tree.query(a_prior, k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
         fs = loaded_file[loaded_file_keys[idx[0]]][:]
         #fs = (1 - mis_id)*fs + mis_id * fs[::-1]
-        fs = fs*mis_id # scale to lof theta
-        data += fs
+        fs = fs*(10**mis_id) # scale to lof theta
+        if fs.shape[0] < 400000:\
+            continue
+            #print("skipping")
+        else:
+            data += fs
     data /= theprior.shape[0]
     return torch.log(torch.nn.functional.relu(torch.tensor(data)+1).type(torch.float32))
+
 
 def generate_sim_data_only_one(prior: float) -> torch.float32:
 
@@ -388,7 +393,7 @@ def restricted_simulations_with_embedding(proposal, embedding, rmin, lossfn, bat
     return final_theta, final_x
 
 
-def restricted_simulations_with_embedding_find_min(proposal, embedding, lossfn, batch_size, num_rounds, target, simulator):
+def restricted_simulations_with_embedding_find_min(proposal, embedding, lossfn, batch_size, num_rounds, target, simulator, cut_off):
     """_summary_
 
     Args:
@@ -410,7 +415,7 @@ def restricted_simulations_with_embedding_find_min(proposal, embedding, lossfn, 
     for i in tqdm(range(0, num_rounds)):
 
         theta = proposal.sample((batch_size,))
-        predicted = simulate_in_batches(simulator, theta, num_workers=1, show_progress_bars=False) # skpping first bin
+        predicted = simulate_in_batches(simulator, theta, num_workers=1, show_progress_bars=False)[:,cut_off:] # skipping to cut off frequency, 
 
         with torch.no_grad():
             embedding_predicted = embedding(predicted.unsqueeze(1).to(the_device))
@@ -434,7 +439,8 @@ def main(argv):
 
     high_param = 0.0 * torch.ones(1, device=the_device)
     low_param = -7*torch.ones(1, device=the_device)
-    batch_size=20
+    batch_size=10
+       
 
     ind_prior = MultipleIndependent(
     [
@@ -511,14 +517,15 @@ def main(argv):
 
     print("Creating embedding network")
 
-    min_freq = sample_size*2*(0.1/100) # cut_off frequency
+    min_freq = int(sample_size*2*(0.1/100))# cut_off frequency
 
     true_x = (load_true_data('emperical_standiing_height_gwas.npy' , 0)).unsqueeze(0) #[row, col] = [0, min_freq:sample_size*2-1]
     true_x = true_x[0, min_freq:]
-    embedding_net = SummaryNet(true_x.shape[0], [32, 32, 16]).to(the_device)
+    embedding_net = SummaryNet(true_x.shape[0], [64, 32, 32]).to(the_device)
+    print("Created embedding net")
     embedding_true_x = embedding_net(true_x.unsqueeze(0).to(the_device)) # shoudl be of shape batch size x 1 x sample-sze
     embedding_true_x_norm = (embedding_true_x.squeeze(1)/embedding_true_x.squeeze(1).sum()).unsqueeze(1)
-    print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1))
+    print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1-min_freq))
 
 
     print("Starting to Train")
@@ -528,8 +535,8 @@ def main(argv):
 
     num_rounds=1000
     nmin, nmean, nmax = restricted_simulations_with_embedding_find_min(proposal, embedding_net, sinkhorn,
-                                                             batch_size, num_rounds, embedding_true_x_norm, simulator)
-    print("lowest min {}, max min {}, mean min {}".format(np.min(nmin), np.max(nmin), np.mean(nmin)))
+                                                             batch_size, num_rounds, embedding_true_x_norm, simulator, min_freq)
+    print("lowest min {}, max min {}, mean min {}, median_min {}".format(np.min(nmin), np.max(nmin), np.mean(nmin), np.median(nmin)))
     print("mean loss {}".format(np.mean(nmean)))
     print("max mean loss {}".format(np.mean(nmax)))
     # First created restricted estimator
