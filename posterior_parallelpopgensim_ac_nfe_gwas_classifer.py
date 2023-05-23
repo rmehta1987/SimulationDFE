@@ -172,19 +172,13 @@ def aggregated_generate_sim_data(prior: float) -> torch.float32:
     theprior = prior[:-1] # last dim is misidentification
     gammas = 10**(theprior.cpu().numpy().squeeze())
 
-    mis_id=prior[-1].cpu().numpy()
+    scaling_theta=prior[-1].cpu().numpy()
     numskipped=0
     for a_prior in gammas:
         _, idx = loaded_tree.query(a_prior, k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
         fs = loaded_file[loaded_file_keys[idx[0]]][:]
-        #fs = (1 - mis_id)*fs + mis_id * fs[::-1]
-        fs = fs*(10**mis_id) # scale to lof theta
-        if fs.shape[0] < 400000:\
-            #continue
-            #print("skipping")
-            numskipped+=1
-        else:
-            data += fs
+        fs = fs*(10**scaling_theta) # scale to gwas theta rate
+        data += fs
     data = data /(theprior.shape[0]-numskipped)
     return torch.log(torch.nn.functional.relu(torch.tensor(data)+1).type(torch.float32))
 
