@@ -173,17 +173,19 @@ def aggregated_generate_sim_data(prior: float) -> torch.float32:
     gammas = 10**(theprior.cpu().numpy().squeeze())
 
     mis_id=prior[-1].cpu().numpy()
+    numskipped=0
     for a_prior in gammas:
         _, idx = loaded_tree.query(a_prior, k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
         fs = loaded_file[loaded_file_keys[idx[0]]][:]
         #fs = (1 - mis_id)*fs + mis_id * fs[::-1]
         fs = fs*(10**mis_id) # scale to lof theta
         if fs.shape[0] < 400000:\
-            continue
+            #continue
             #print("skipping")
+            numskipped+=1
         else:
             data += fs
-    data /= theprior.shape[0]
+    data = data /(theprior.shape[0]-numskipped)
     return torch.log(torch.nn.functional.relu(torch.tensor(data)+1).type(torch.float32))
 
 
@@ -223,9 +225,9 @@ class SummaryNet(nn.Module):
         super().__init__()
         self.sample_size = sample_size # For monarch this needs to be divisible by the block size
         self.block_size = block_sizes
-        self.linear4 = MonarchLinear(self.sample_size, int(self.sample_size / 10), nblocks=self.block_size[0]) # 11171
-        self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # 11171
-        self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # 11171
+        self.linear4 = MonarchLinear(self.sample_size, int(self.sample_size / 10), nblocks=self.block_size[0]) # size: [sample_size-cut_freq, ~72077]
+        self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # [~72077, ~72077]
+        self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # [~72077, ~72077]
 
         self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(),
                                    self.linear5, nn.Dropout(dropout_rate), nn.GELU(),
