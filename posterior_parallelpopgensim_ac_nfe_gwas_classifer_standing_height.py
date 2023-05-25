@@ -44,7 +44,7 @@ FLAGS = flags.FLAGS
 logging.getLogger('matplotlib').setLevel(logging.ERROR) # See: https://github.com/matplotlib/matplotlib/issues/14523
 
 # Integer Flags
-flags.DEFINE_integer('sample_size', 359983, 'Diploid Population Sample Size where N is the number of diploids') # should be 55855
+flags.DEFINE_integer('sample_size', 360388, 'Diploid Population Sample Size where N is the number of diploids') # should be 55855
 flags.DEFINE_integer('num_hidden',256, "Number of hidden layers in normalizing flow architecture")
 flags.DEFINE_integer('num_sim', 200, 'How many simulations to run')
 flags.DEFINE_integer('rounds', 15, 'How many round of simulations to run, (total simulations = num_sim*rounds')
@@ -164,7 +164,7 @@ def get_sim_datafrom_hdf5(path_to_sim_file: str):
     loaded_tree = KDTree(np.asarray(loaded_file_keys)[:,None]) # needs to have a column dimension
 
 def aggregated_generate_sim_data(prior: float) -> torch.float32:
-
+    global sample_size
     data = np.zeros((sample_size*2-1))
     theprior = prior[:-1] # last dim is misidentification
     gammas = 10**(theprior.cpu().numpy().squeeze())
@@ -179,7 +179,7 @@ def aggregated_generate_sim_data(prior: float) -> torch.float32:
         data += fs
     data = data / num_aggregate
     data = data.astype(int)
-    return torch.log(torch.nn.functional.relu(torch.tensor(data)+1).type(torch.float32))
+    return torch.exp(torch.log(torch.nn.functional.relu(torch.tensor(data)+1)).type(torch.float32))
 
 
 def generate_sim_data_only_one(prior: float) -> torch.float32:
@@ -189,7 +189,7 @@ def generate_sim_data_only_one(prior: float) -> torch.float32:
     _, idx = loaded_tree.query(theprior.cpu().numpy(), k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
     fs = loaded_file[loaded_file_keys[idx[0]]][:] # lof scaling parameter
 
-    return torch.exp(torch.log(torch.nn.functional.relu(torch.tensor(fs))+1)).type(torch.float32)
+    return torch.log(torch.nn.functional.relu(torch.tensor(fs))+1).type(torch.float32)
 
 
 def load_true_data(a_path: str, type: int) -> torch.float32:
@@ -202,6 +202,7 @@ def load_true_data(a_path: str, type: int) -> torch.float32:
     Returns:
         Returns the SFS of the true data-set
     """
+    global sample_size
     if type == 0:
         sfs = np.load(a_path)
         sfs = torch.tensor(sfs).type(torch.float32)
@@ -234,7 +235,7 @@ class SummaryNet(nn.Module):
 def finished_table_building():
     print("\n ****************************************** Completely finished experiment ****************************************** ")
 
-def restricted_simulations(proposal, true_x, simulator, sample_size=300, oversampling_factor=None):
+def restricted_simulations(proposal, true_x, simulator, num_samples=300, oversampling_factor=None):
     """restrict simulatins to be in a squared distance between true and simulated
 
     Args:
@@ -286,7 +287,7 @@ def restricted_simulations(proposal, true_x, simulator, sample_size=300, oversam
 
         # stop when we have enough good simulations
         x = torch.cat(new_predicted, dim=0)
-        if x.shape[0] >= sample_size:
+        if x.shape[0] >= num_samples:
             rerun = False
             print("Finished collecting good samples, shape of accepted simulations: {}".format(x.shape[0]))
         if rerun:
@@ -310,7 +311,7 @@ def restricted_simulations(proposal, true_x, simulator, sample_size=300, oversam
         final_x= torch.cat((good_predicted, nan_predicted),dim=0)
     return final_theta, final_x
 
-def restricted_simulations_with_embedding(proposal, embedding, rmin, lossfn, batch_size, target, simulator,  min_freq, sample_size=300, oversampling_factor=None):
+def restricted_simulations_with_embedding(proposal, embedding, rmin, lossfn, batch_size, target, simulator,  min_freq, num_samples=300, oversampling_factor=None):
     """_summary_
 
     Args:
@@ -323,7 +324,7 @@ def restricted_simulations_with_embedding(proposal, embedding, rmin, lossfn, bat
         sample_size (int, optional): _description_. Defaults to 300.
         oversampling_factor (_type_, optional): _description_. Defaults to None.
     """
-
+    global sample_size
      #calculate l2 distance between predicted and true for the first 10 bins
     rerun = True
     new_predicted = []
@@ -356,7 +357,7 @@ def restricted_simulations_with_embedding(proposal, embedding, rmin, lossfn, bat
                 # stop when we have enough good simulations
                 x = torch.cat(new_predicted, dim=0)
                 count += 1
-                if x.shape[0] >= sample_size:
+                if x.shape[0] >= num_samples:
                     rerun = False
                     print("Finished collecting good samples, shape of accepted simulations: {}".format(x.shape[0]))
                 if rerun and count%20==0:
@@ -433,7 +434,7 @@ def main(argv):
     # sets up cached simulated data to read from hdf5 file
     get_sim_datafrom_hdf5('chr10_sim_genome_wide_mut_sfs_gwas.h5')
     print("Finished Loading Dataset")
-
+    global sample_size
 
     high_param = 0.0 * torch.ones(1, device=the_device)
     low_param = -7*torch.ones(1, device=the_device)
@@ -517,7 +518,7 @@ def main(argv):
 
     min_freq = int(sample_size*2*(0.1/100))# cut_off frequency
 
-    true_x = (load_true_data('/home/rahul/PopGen/EffectSizes/emperical_bmi_gwas.npy' , 0)).unsqueeze(0) #[row, col] = [0, min_freq:sample_size*2-1]
+    true_x = (load_true_data('emperical_standiing_height_gwas.npy' , 0)).unsqueeze(0) #[row, col] = [0, min_freq:sample_size*2-1]
     true_x = true_x[0, min_freq:]
     embedding_net = SummaryNet(true_x.shape[0], [64, 32, 32]).to(the_device)
     print("Created embedding net")
@@ -539,8 +540,9 @@ def main(argv):
     print("max mean loss {}".format(np.mean(nmax)))
     # First created restricted estimator
     
+    
     '''
-    rmin = 1.04 # get the min from initial simulations
+    rmin = 1.57 # get the min from initial simulations
     
     restriction_estimator = RestrictionEstimator(prior=ind_prior, decision_criterion="nan", device=the_device)
     if load_classifier:

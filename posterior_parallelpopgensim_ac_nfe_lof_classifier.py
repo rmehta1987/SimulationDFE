@@ -180,7 +180,7 @@ def aggregated_generate_sim_data(prior: float) -> torch.float32:
         fs = fs*.01552243512  # scale to lof theta
         data += fs
     data /= theprior.shape[0]
-    return torch.log(torch.nn.functional.relu(torch.tensor(data)+1).type(torch.float32))
+    return torch.exp(torch.log(torch.nn.functional.relu(torch.tensor(data)+1)).type(torch.float32))
 
 def generate_sim_data_only_one(prior: float) -> torch.float32:
 
