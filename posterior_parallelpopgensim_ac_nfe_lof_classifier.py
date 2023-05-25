@@ -369,11 +369,9 @@ def restricted_simulations_with_embedding(proposal, embedding, rmin, lossfn, bat
                     bad_theta = bad_theta[:150]
             else:
                 print("Rejected sampler could not find enough samples within enough time, rerunning")
+                rerun = False
 
             
-
-
-
     invalid_predicted = torch.cat(bad_predicted, dim=0)
     nan_predicted = torch.as_tensor([float("nan")],device='cpu')*torch.ones_like(invalid_predicted)
     good_predicted = torch.cat(new_predicted, dim=0)

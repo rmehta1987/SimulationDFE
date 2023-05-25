@@ -21,10 +21,7 @@ import pandas as pd
 import logging
 import atexit
 import torch.nn.functional as F
-from sortedcontainers import SortedDict
 from scipy.spatial import KDTree
-#from pytorch_block_sparse import BlockSparseLinear
-from sparselinear import activationsparsity as asy
 from monarch_linear import MonarchLinear
 from sbi.samplers.vi.vi_pyro_flows import build_flow
 from torch.profiler import profile, record_function, ProfilerActivity
@@ -47,7 +44,7 @@ FLAGS = flags.FLAGS
 logging.getLogger('matplotlib').setLevel(logging.ERROR) # See: https://github.com/matplotlib/matplotlib/issues/14523
 
 # Integer Flags
-flags.DEFINE_integer('sample_size', 360388, 'Diploid Population Sample Size where N is the number of diploids') # should be 55855
+flags.DEFINE_integer('sample_size', 359983, 'Diploid Population Sample Size where N is the number of diploids') # should be 55855
 flags.DEFINE_integer('num_hidden',256, "Number of hidden layers in normalizing flow architecture")
 flags.DEFINE_integer('num_sim', 200, 'How many simulations to run')
 flags.DEFINE_integer('rounds', 15, 'How many round of simulations to run, (total simulations = num_sim*rounds')
@@ -171,14 +168,17 @@ def aggregated_generate_sim_data(prior: float) -> torch.float32:
     data = np.zeros((sample_size*2-1))
     theprior = prior[:-1] # last dim is misidentification
     gammas = 10**(theprior.cpu().numpy().squeeze())
+    num_aggregate = prior.shape[0]-1 # since the last dimension is the scaling parameter
 
     scaling_theta=prior[-1].cpu().numpy()
     for a_prior in gammas:
         _, idx = loaded_tree.query(a_prior, k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
         fs = loaded_file[loaded_file_keys[idx[0]]][:]
         fs = fs*(10**scaling_theta) # scale to gwas theta rate
+        fs = (fs[:sample_size*2-1])
         data += fs
-    data = data /(theprior.shape[0])
+    data = data / num_aggregate
+    data = data.astype(int)
     return torch.log(torch.nn.functional.relu(torch.tensor(data)+1).type(torch.float32))
 
 
@@ -339,7 +339,7 @@ def restricted_simulations_with_embedding(proposal, embedding, rmin, lossfn, bat
             else:
                 theta = proposal.sample((batch_size,),max_sampling_batch_size=5000, oversampling_factor=oversampling_factor).to('cpu')
             if theta is not None:
-                predicted = simulate_in_batches(simulator, theta, num_workers=1, show_progress_bars=False)[:,min_freq:]
+                predicted = simulate_in_batches(simulator, theta, num_workers=1, show_progress_bars=False)[:,min_freq:sample_size*2-1]
                 embedding_predicted = embedding(predicted.unsqueeze(1).to(the_device))
                 norm_predicted = (embedding_predicted.squeeze(1)/embedding_predicted.squeeze(1).sum(dim=1).view(embedding_predicted.shape[0],1)).unsqueeze(1)
 
@@ -369,7 +369,7 @@ def restricted_simulations_with_embedding(proposal, embedding, rmin, lossfn, bat
                     bad_theta = bad_theta[:150]
             else:
                 print("Rejected sampler could not find enough samples within enough time, rerunning")
-                rerun = False
+                rerun = True
 
 
 
@@ -413,7 +413,7 @@ def restricted_simulations_with_embedding_find_min(proposal, embedding, lossfn, 
     for i in tqdm(range(0, num_rounds)):
 
         theta = proposal.sample((batch_size,))
-        predicted = simulate_in_batches(simulator, theta, num_workers=1, show_progress_bars=False)[:,cut_off:] # skipping to cut off frequency, 
+        predicted = simulate_in_batches(simulator, theta, num_workers=1, show_progress_bars=False)[:,cut_off:sample_size*2-1] # skipping to cut off frequency, 
 
         with torch.no_grad():
             embedding_predicted = embedding(predicted.unsqueeze(1).to(the_device))
@@ -517,7 +517,7 @@ def main(argv):
 
     min_freq = int(sample_size*2*(0.1/100))# cut_off frequency
 
-    true_x = (load_true_data('emperical_standiing_height_gwas.npy' , 0)).unsqueeze(0) #[row, col] = [0, min_freq:sample_size*2-1]
+    true_x = (load_true_data('/home/rahul/PopGen/EffectSizes/emperical_bmi_gwas.npy' , 0)).unsqueeze(0) #[row, col] = [0, min_freq:sample_size*2-1]
     true_x = true_x[0, min_freq:]
     embedding_net = SummaryNet(true_x.shape[0], [64, 32, 32]).to(the_device)
     print("Created embedding net")
@@ -528,9 +528,9 @@ def main(argv):
 
     print("Starting to Train")
     sinkhorn = SamplesLoss("sinkhorn", p=2, blur=0.05, scaling=0.99)
-    estimator_round = 500
+    estimator_round = 200
     load_classifier=False
-    '''
+    
     num_rounds=1000
     nmin, nmean, nmax = restricted_simulations_with_embedding_find_min(proposal, embedding_net, sinkhorn,
                                                              batch_size, num_rounds, embedding_true_x_norm, simulator, min_freq)
@@ -538,6 +538,7 @@ def main(argv):
     print("mean loss {}".format(np.mean(nmean)))
     print("max mean loss {}".format(np.mean(nmax)))
     # First created restricted estimator
+    
     '''
     rmin = 1.04 # get the min from initial simulations
     
@@ -549,7 +550,7 @@ def main(argv):
     else:
         for i in tqdm(range(0,estimator_round)):
             if i == 0:
-                theta, x = restricted_simulations_with_embedding(proposal, embedding_net, rmin, sinkhorn, batch_size, embedding_true_x_norm, simulator, min_freq, sample_size=50)
+                theta, x = restricted_simulations_with_embedding(proposal, embedding_net, rmin, sinkhorn, batch_size, embedding_true_x_norm, simulator, min_freq, sample_size=10)
             else:
                 theta, x = restricted_simulations_with_embedding(proposal, embedding_net, rmin, sinkhorn, batch_size, embedding_true_x_norm, simulator, min_freq, sample_size=150, oversampling_factor=1024)
             restriction_estimator.append_simulations(theta, x, data_device='cpu')
@@ -562,19 +563,19 @@ def main(argv):
                 print("theta test mean: {}.".format(theta_test.cpu().mean()))
                 del theta_test
             proposal = restriction_estimator.restrict_prior(allowed_false_negatives=0.0)
-            if i % 100 == 0 and i > 0:
-                restriction_estimator._x_roundwise = None # too save memory
+            if i % 50 == 0 and i > 0:
+                restriction_estimator._x_roundwise = [] # too save memory
                 save_estimator = deepcopy(restriction_estimator)
                 save_estimator._build_nn=None
-                torch.save(save_estimator, 'nfe_restriction_classifier_gwas_embedding_genome_wide_fixed_theta_{i}.pkl'.format(i))
+                torch.save(save_estimator, f'nfe_restriction_classifier_gwas_embedding_{i}.pkl')
                 del save_estimator
 
         restriction_estimator._x_roundwise = None # too save memory
         save_estimator = deepcopy(restriction_estimator)
         save_estimator._build_nn=None
-        torch.save(save_estimator, 'nfe_restriction_classifier_gwas_embedding_genome_wide_fixed_theta_final.pkl')
+        torch.save(save_estimator, 'nfe_restriction_classifier_gwas_embedding_final.pkl')
         del save_estimator
-
+    '''
     print("Finsished")
 
     
