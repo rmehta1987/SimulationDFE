@@ -222,10 +222,14 @@ class SummaryNet(nn.Module):
         self.linear4 = MonarchLinear(self.sample_size, int(self.sample_size / 10), nblocks=self.block_size[0]) # size: [sample_size-cut_freq, ~72077]
         self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # [~72077, ~72077]
         self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # [~72077, ~72077]
+        self.linear7 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 100), nblocks=self.block_size[3]) # [~72077, ~72077]
+        self.linear8 = MonarchLinear(int(self.sample_size / 100), int(self.sample_size / 100), nblocks=self.block_size[4]) # [~72077, ~72077]
 
         self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(),
                                    self.linear5, nn.Dropout(dropout_rate), nn.GELU(),
-                                   self.linear6)
+                                   self.linear6, nn.Dropout(dropout_rate), nn.GELU(),
+                                   self.linear7, nn.Dropout(dropout_rate), nn.GELU(),
+                                   self.linear8, nn.Dropout(dropout_rate), nn.GELU(),)
     def forward(self, x):
 
         x=self.model(x)
@@ -380,7 +384,7 @@ def restricted_simulations_with_embedding(proposal, embedding, true_at_cut_off, 
                     rerun=False
 
 
-
+    #if 
     invalid_predicted = torch.cat(bad_predicted, dim=0)
     nan_predicted = torch.as_tensor([float("nan")],device='cpu')*torch.ones_like(invalid_predicted)
     good_predicted = torch.cat(new_predicted, dim=0)
@@ -528,11 +532,15 @@ def main(argv):
 
     true_x = (load_true_data('emperical_standiing_height_gwas.npy' , 0)).unsqueeze(0) #[row, col] = [0, min_freq:sample_size*2-1]
     true_x = true_x[0, min_freq:]
-    embedding_net = SummaryNet(true_x.shape[0], [64, 32, 32]).to(the_device)
+    print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1-min_freq))
+
+    embedding_net = SummaryNet(true_x.shape[0], [64, 32, 32, 32, 32]).to(the_device)
     print("Created embedding net")
+
+    # Create normed true_x for loss function
     embedding_true_x = embedding_net(true_x.unsqueeze(0).to(the_device)) # shoudl be of shape batch size x 1 x sample-sze
     embedding_true_x_norm = (embedding_true_x.squeeze(1)/embedding_true_x.squeeze(1).sum()).unsqueeze(1)
-    print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1-min_freq))
+   
 
 
     print("Starting to Train")
@@ -550,9 +558,9 @@ def main(argv):
     
     '''
     
-    rmin = 0.70 # get the min from initial simulations
+    rmin = 1.7350 # get the min from initial simulations
     true_at_cut_off = true_x[0]
-    restriction_estimator = RestrictionEstimator(prior=ind_prior, decision_criterion="nan", device=the_device)
+    restriction_estimator = RestrictionEstimator(prior=ind_prior, model="resnet", decision_criterion="nan", hidden_features=256, num_blocks=4, device=the_device)
     if load_classifier:
         restriction_estimator = torch.load('nfe_restriction_classifier_lof_embedding_genome_wide.pkl')
         proposal = restriction_estimator.restrict_prior(allowed_false_negatives=0.0)
