@@ -168,9 +168,10 @@ def aggregated_generate_sim_data(prior: float) -> torch.float32:
     data = np.zeros((sample_size*2-1))
     theprior = prior[:-1] # last dim is misidentification
     gammas = 10**(theprior.cpu().numpy().squeeze())
-    num_aggregate = prior.shape[0]-1 # since the last dimension is the scaling parameter
-
-    scaling_theta=prior[-1].cpu().numpy()
+    #num_aggregate = prior.shape[0]-1 # since the last dimension is the scaling parameter
+    num_aggregate=prior.shape[0]
+    #scaling_theta=prior[-1].cpu().numpy()
+    scaling_theta=1.0
     assert scaling_theta > -3.0, print("Debug check to make sure scaling theta is greather 10^-3.0")
     for a_prior in gammas:
         _, idx = loaded_tree.query(a_prior, k=(1,)) # the k sets number of neighbors, while we only want 1, we need to make sure it returns an array that can be indexed
@@ -223,14 +224,16 @@ class SummaryNet(nn.Module):
         self.linear4 = MonarchLinear(self.sample_size, int(self.sample_size / 10), nblocks=self.block_size[0]) # size: [sample_size-cut_freq, ~72077]
         self.linear5 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10) , nblocks=self.block_size[1]) # [~72077, ~72077]
         self.linear6 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 10), nblocks=self.block_size[2]) # [~72077, ~72077]
-        self.linear7 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 100), nblocks=self.block_size[3]) # [~72077, ~72077]
-        self.linear8 = MonarchLinear(int(self.sample_size / 100), int(self.sample_size / 100), nblocks=self.block_size[4]) # [~72077, ~72077]
+        #self.linear7 = MonarchLinear(int(self.sample_size / 10), int(self.sample_size / 50), nblocks=self.block_size[3]) # [~72077, ~72077]
+        #self.linear8 = MonarchLinear(int(self.sample_size / 50), int(self.sample_size / 50), nblocks=self.block_size[4]) # [~14401, ~14401]
+        #self.linear9 = MonarchLinear(int(self.sample_size / 50), int(self.sample_size / 50), nblocks=self.block_size[4]) # [~14401, ~14401]
 
-        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.GELU(),
-                                   self.linear5, nn.Dropout(dropout_rate), nn.GELU(),
-                                   self.linear6, nn.Dropout(dropout_rate), nn.GELU(),
-                                   self.linear7, nn.Dropout(dropout_rate), nn.GELU(),
-                                   self.linear8, nn.Dropout(dropout_rate), nn.GELU(),)
+        self.model = nn.Sequential(self.linear4, nn.Dropout(dropout_rate), nn.LeakyReLU(),
+                                   self.linear5, nn.Dropout(dropout_rate), nn.LeakyReLU(),
+                                   self.linear6,)
+                                   #self.linear7, nn.Dropout(dropout_rate), nn.LeakyReLU(),
+                                   #self.linear8, nn.Dropout(dropout_rate), nn.LeakyReLU(),
+                                   #self.linear9)
     def forward(self, x):
 
         x=self.model(x)
@@ -345,7 +348,7 @@ def restricted_simulations_with_embedding(proposal, embedding, true_at_cut_off, 
             if not oversampling_factor:
                 theta = proposal.sample((batch_size,))
             else:
-                theta = proposal.sample((batch_size,),max_sampling_batch_size=5000, oversampling_factor=oversampling_factor)
+                theta = proposal.sample((batch_size,),max_sampling_batch_size=10000, oversampling_factor=oversampling_factor)
                 #print("Theta scaling factor should be greater than -3, {}".format(theta[:, -1].cpu().numpy()))
             if theta is not None:
                 theta=theta.to('cpu')
@@ -399,11 +402,11 @@ def restricted_simulations_with_embedding(proposal, embedding, true_at_cut_off, 
         invalid_theta = torch.cat(bad_theta,dim=0).to('cpu')
         good_theta = torch.cat(new_theta, dim=0).to('cpu')
         if not oversampling_factor:
-            final_theta = torch.cat((good_theta, invalid_theta[:150, :]),dim=0)
-            final_x= torch.cat((good_predicted, nan_predicted[:150, :]),dim=0)
-        elif int(invalid_theta.shape[0]/good_theta.shape[0])>2 and invalid_theta.shape[0] > 500:
-            final_theta = torch.cat((good_theta, invalid_theta[:300, :]),dim=0)
-            final_x= torch.cat((good_predicted, nan_predicted[:300, :]),dim=0)
+            final_theta = torch.cat((good_theta, invalid_theta[:num_samples, :]),dim=0)
+            final_x= torch.cat((good_predicted, nan_predicted[:num_samples, :]),dim=0)
+        elif invalid_theta.shape[0] > good_theta.shape[0]:
+            final_theta = torch.cat((good_theta, invalid_theta[:num_samples, :]),dim=0)
+            final_x= torch.cat((good_predicted, nan_predicted[:num_samples, :]),dim=0)
         else:
             final_theta = torch.cat((good_theta, invalid_theta),dim=0)
             final_x= torch.cat((good_predicted, nan_predicted),dim=0)
@@ -412,7 +415,7 @@ def restricted_simulations_with_embedding(proposal, embedding, true_at_cut_off, 
         return None, None
 
 
-def restricted_simulations_with_embedding_find_min(proposal, embedding, lossfn, batch_size, num_rounds, target, simulator, cut_off):
+def restricted_simulations_with_embedding_find_min(proposal, embedding, lossfn, batch_size, num_rounds, target, true_sample, simulator, cut_off):
     """_summary_
 
     Args:
@@ -458,7 +461,7 @@ def main(argv):
 
     high_param = 0.0 * torch.ones(1, device=the_device)
     low_param = -7*torch.ones(1, device=the_device)
-    low_param2 = -3*torch.ones(1, device=the_device)
+    low_param2 = -1*torch.ones(1, device=the_device)
     batch_size=10
        
 
@@ -524,7 +527,7 @@ def main(argv):
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
         torch.distributions.Uniform(low=low_param, high=high_param),
-        torch.distributions.Uniform(low=low_param2, high=high_param),
+        #torch.distributions.Uniform(low=low_param2, high=high_param),
     ],
     validate_args=False,)
     # Set up prior and simulator for SBI
@@ -532,8 +535,6 @@ def main(argv):
     proposal = prior
 
     simulator = process_simulator(aggregated_generate_sim_data, prior, prior_returns_numpy)
-    #simulator = process_simulator(generate_sim_data_only_one, prior, prior_returns_numpy)
-
 
     print("Creating embedding network")
 
@@ -543,7 +544,7 @@ def main(argv):
     true_x = true_x[0, min_freq:]
     print("True data shape (should be the same as the sample size): {} {}".format(true_x.shape[0], sample_size*2-1-min_freq))
 
-    embedding_net = SummaryNet(true_x.shape[0], [32, 32, 32, 32, 32]).to(the_device)
+    embedding_net = SummaryNet(true_x.shape[0], [32, 32, 32]).to(the_device)
     print("Created embedding net")
 
     # Create normed true_x for loss function
@@ -559,15 +560,15 @@ def main(argv):
     '''
     num_rounds=1000
     nmin, nmean, nmax = restricted_simulations_with_embedding_find_min(proposal, embedding_net, sinkhorn,
-                                                             batch_size, num_rounds, embedding_true_x_norm, simulator, min_freq)
-    print("lowest min measurements {}, max min {}, mean min {}, median_min {}".format(np.min(nmin), np.max(nmin), np.mean(nmin), np.median(nmin)))
-    print("mean loss {}".format(np.mean(nmean)))
-    print("max mean loss {}".format(np.mean(nmax)))
+                                                             batch_size, num_rounds, embedding_true_x_norm, true_x, simulator, min_freq)
+    print("lowest min: {}, max min {}, mean min {}, median_min {}".format(np.min(nmin), np.max(nmin), np.mean(nmin), np.median(nmin)))
+    print("mean of all losses {}".format(np.mean(nmean)))
+    print("mean of maximum loss {}".format(np.mean(nmax)))
     # First created restricted estimator
-    
     '''
+    
     rerun = 0
-    rmin = 1.7350 # get the min from initial simulations
+    rmin = 0.920 # get the min from initial simulations
     true_at_cut_off = true_x[0]
     restriction_estimator = RestrictionEstimator(prior=ind_prior, model="resnet", decision_criterion="nan", hidden_features=256, num_blocks=4, device=the_device)
     if load_classifier:
@@ -576,41 +577,59 @@ def main(argv):
 
     else:
         for i in tqdm(range(0,estimator_round)):
+
+            # keep previous proposal if this one fails:
+            
             if i == 0:
+                prev_proposal = proposal
                 theta, x = restricted_simulations_with_embedding(proposal, embedding_net, true_at_cut_off, rmin, sinkhorn, batch_size, embedding_true_x_norm, simulator, min_freq, num_samples=50)
             else:
+                prev_proposal = proposal
                 theta, x = restricted_simulations_with_embedding(proposal, embedding_net, true_at_cut_off, rmin, sinkhorn, batch_size, embedding_true_x_norm, simulator, min_freq, num_samples=150, oversampling_factor=1024)
             if theta is not None:
                 restriction_estimator.append_simulations(theta, x, data_device='cpu')
                 if (i < estimator_round - 1):
                     # training not needed in last round because classifier will not be used anymore.
-                    restriction_estimator.train(loss_importance_weights=True,training_batch_size=20)
+                    restriction_estimator.train(loss_importance_weights=False,training_batch_size=20)
                     restriction_estimator._x_roundwise = []
-                if i % 5 == 0:
+                    proposal = restriction_estimator.restrict_prior(allowed_false_negatives=0.0)
                     theta_test = proposal.sample((1000,)) 
-                    print("selection test mean: {}.".format(theta_test[:,:-1].cpu().mean()))
-                    print("scaling theta mean: {}.".format(theta_test[:,-1].cpu()))
+                    if theta_test is not None:
+                        print("selection test mean: {}.".format(theta_test[:,:-1].cpu().mean()))
+                        print("scaling theta mean: {}.".format(theta_test[:,-1].cpu().mean()))
+                    else:
+                        print("Bad proposal running with previous")
+                        proposal = prev_proposal
+                        theta_test = proposal.sample((1000,))
+                        print("selection test mean: {}.".format(theta_test[:,:-1].cpu().mean()))
+                        print("scaling theta mean: {}.".format(theta_test[:,-1].cpu().mean()))
                     del theta_test
-                proposal = restriction_estimator.restrict_prior(allowed_false_negatives=0.0)
-                if i % 50 == 0 and i > 0:
+                
+                if i % 10 == 0 and i > 0:
+                    print("Validation log prob of the latest round: {}.".format(restriction_estimator._validation_log_probs[-1]))
                     restriction_estimator._x_roundwise = [] # too save memory
                     save_estimator = deepcopy(restriction_estimator)
                     save_estimator._build_nn=None
-                    torch.save(save_estimator, f'nfe_restriction_classifier_gwas_embedding_round3_{i}.pkl')
+                    torch.save(save_estimator, f'nfe_restriction_classifier_gwas_embedding_round4_{i}.pkl')
                     del save_estimator
             else:
-                print("Bad re-run trying again")
+                print("Bad re-run trying again with previous proposal")
                 rerun+=1
+                proposal = prev_proposal
+                theta_test = proposal.sample((1000,)) 
+                if theta_test is not None:
+                        print("selection test mean: {}.".format(theta_test[:,:-1].cpu().mean()))
+                        print("scaling theta mean: {}.".format(theta_test[:,-1].cpu().mean()))
                 if rerun > 50:
-                    print("Stopping early could not find any better theta")
-                    print("selection test mean: {}.".format(theta_test[:-1].cpu().mean()))
-                    print("scaling theta mean: {}.".format(theta_test[-1].cpu()))
+                    theta_test = proposal.sample((1000,)) 
                     break
+            
+            
 
         restriction_estimator._x_roundwise = None # too save memory
         save_estimator = deepcopy(restriction_estimator)
         save_estimator._build_nn=None
-        torch.save(save_estimator, 'nfe_restriction_classifier_gwas_embedding_round3_final.pkl')
+        torch.save(save_estimator, 'nfe_restriction_classifier_gwas_embedding_round4_final.pkl')
         del save_estimator
     
     print("Finsished")
