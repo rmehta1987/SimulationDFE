@@ -728,19 +728,22 @@ def main(argv):
     restriction_estimator = RestrictionEstimator(prior=ind_prior2, decision_criterion="nan", device=the_device)
 
 
+
+    
+
     #simulator = generate_moments_sim_data
     # First learn posterior
     print("Setting up posteriors")
     density_estimator_function = posterior_nn(model="nsf", hidden_features=512, num_transforms=number_of_transforms, num_bins=num_bins, tail_bound=tail_bound, 
                                               dropout_probability=dropout_probability)
 
-    
+    true_x = load_true_data('emperical_missense_sfs_msl.npy', 0).unsqueeze(0)
 
     proposal = prior
-
+    '''
     
     #true_x = load_true_data('emperical_missense_sfs_msl.npy', 0).unsqueeze(0)
-    true_x = load_true_data('emperical_missense_sfs_msl.npy', 0).unsqueeze(0)
+    
     log_true_x = torch.log(true_x + 1)
     log_norm_true_x = log_true_x/log_true_x.sum(dim=1)
     norm_true_x = true_x/true_x.sum()
@@ -790,23 +793,26 @@ def main(argv):
     theta = proposal.sample((10000,), max_sampling_batch_size=10000)
     thetamin = theta.reshape(-1).min()
     thetamax = theta.reshape(-1).max()
-    '''prior = CustomPriorWrapper(
+    prior = CustomPriorWrapper(
             custom_prior=prior,
             event_shape=torch.Size([theta.numel()]),
             **custom_prior_wrapper_kwargs,
-        )'''
+        )
     new_proposal = CustomPriorWrapper(proposal, event_shape=torch.Size([theta.shape[1]]), return_type=torch.float32, lower_bound=low_param, 
                                       upper_bound=high_param, arg_constraints=ind_prior2.custom_arg_constraints)
     #new_proposal = CustomPriorWrapper(proposal, event_shape=torch.Size([theta.shape[1]]), return_type=torch.float32, arg_constraints=ind_prior2.custom_arg_constraints)
     new_proposal, num_parameters, prior_returns_numpy = process_prior(new_proposal)
-    infer_posterior = SNPE(new_proposal, show_progress_bars=True, device=the_device, density_estimator=density_estimator_function)
+    
     theta = proposal.sample((300,), max_sampling_batch_size=5000)
     sns.kdeplot(theta.reshape(-1).cpu().numpy())
     plt.savefig('theta_round_inital.png')
     accept_reject_fn_classifier = get_classifier_thresholder(restriction_estimator._classifier, restriction_estimator._first_round_validation_theta, 
                                                              restriction_estimator._first_round_validation_label, 
                                                              allowed_false_negatives=0.0, reweigh_factor=None, device=the_device)
+    '''
+    infer_posterior = SNPE(proposal, show_progress_bars=True, device=the_device, density_estimator=density_estimator_function)
     for i in range(0,rounds+1):
+        '''
         if i == 0:
             #theta = proposal.sample((300,), max_sampling_batch_size=5000)
             theta, x = restricted_simulations3(proposal, true_x, simulator, sample_size=300)
@@ -822,26 +828,30 @@ def main(argv):
         
         #x = simulate_in_batches(simulator, theta.to(the_device), num_workers=1, show_progress_bars=True)
 
-        
+        '''
         print("\n******************Building density estimator for round {}*************************\n".format(i))
 
         if i == 0:
+            theta = proposal.sample((300,))
+            x = simulate_in_batches(simulator, theta.to(the_device), num_workers=1, show_progress_bars=True)
             #calibration_kernel = lambda z: torch.log(torch.sum(torch.nn.functional.mse_loss(z, true_x.repeat(z.shape[0],1).to(the_device),reduction='none'),dim=1))
             #calibration_kernel = lambda z: mmdloss(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
-            with torch.no_grad():
+            #with torch.no_grad():
                 #calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)) + torch.nn.functional.poisson_nll_loss(z.unsqueeze(1),true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
                 #calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
-                calibration_kernel = lambda z: calibration_kernel_2(z, true_x, norm_true_x, sinkhorn)
+                #calibration_kernel = lambda z: calibration_kernel_2(z, true_x, norm_true_x, sinkhorn)
             infer_posterior.append_simulations(theta, x.exp(), data_device='cpu', proposal=proposal ).train(learning_rate=5e-4, 
                                                                                    training_batch_size=30, use_combined_loss=True, calibration_kernel=None, 
                                                                                    show_train_summary=False,
                                                                                    force_first_round_loss=True)
         else:
-            with torch.no_grad():
+            theta = proposal.sample((300,))
+            x = simulate_in_batches(simulator, theta.to(the_device), num_workers=1, show_progress_bars=True)
+            #with torch.no_grad():
                 #calibration_kernel = lambda z: wassloss(z.unsqueeze(1), true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
                 #calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1)) + torch.nn.functional.poisson_nll_loss(z.unsqueeze(1),true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
                 #calibration_kernel = lambda z: sinkhorn((z/z.sum(dim=1).view(z.shape[0],1)).unsqueeze(1), norm_true_x.repeat(z.shape[0],1).to(the_device).unsqueeze(1))
-                calibration_kernel = lambda z: calibration_kernel_2(z, true_x, norm_true_x, sinkhorn)
+                #calibration_kernel = lambda z: calibration_kernel_2(z, true_x, norm_true_x, sinkhorn)
             infer_posterior.append_simulations(theta, x.exp(), proposal=posterior_build, data_device='cpu').train(num_atoms=10, force_first_round_loss=True, 
                                                                                                             learning_rate=5e-4, training_batch_size=30,
                                                                                                             use_combined_loss=True, 
@@ -863,7 +873,7 @@ def main(argv):
             vi_parameters = get_flow_builder("scf", batch_norm=False, base_dist = base_dist, permute = True, num_transforms=6,
                                              hidden_dims= [32, 32], skip_connections=False, nonlinearity=nn.ReLU(), count_bins=8, order="linear", bound=8 )
      
-            posterior = infer_posterior.build_posterior(sample_with = "vi", prior=prior, vi_method="IW", vi_parameters={"q": vi_parameters})
+            posterior = infer_posterior.build_posterior(sample_with = "vi", prior=prior, vi_method="fKL", vi_parameters={"q": vi_parameters})
             print("\n ****************************************** Training to emperical observation for round {} ******************************************.\n".format(i))
             posterior_build = posterior.set_default_x(true_x).train(n_particles=200, max_num_iters=250, quality_control=False, stick_the_landing=True, alpha=0.5, 
                                                                     unbiased=True, dreg=True, K=12, learning_rate=5e-4, weight_decay=1e-4)

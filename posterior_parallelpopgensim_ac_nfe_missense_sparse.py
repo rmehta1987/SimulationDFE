@@ -235,7 +235,7 @@ def load_true_data(a_path: str, type: int) -> torch.float32:
     else:
         sfs = torch.load(a_path)
         sfs.to(the_device)
-    assert sfs.shape[0] == sample_size*2-1-1, "Sample Size must be the same dimensions as the Site Frequency Spectrum, SFS shape: {} and sample shape (2*N-1): {}".format(sfs.shape[0], sample_size*2-1)
+    assert sfs.shape[0] == sample_size*2-1, "Sample Size must be the same dimensions as the Site Frequency Spectrum, SFS shape: {} and sample shape (2*N-1): {}".format(sfs.shape[0], sample_size*2-1)
 
     return sfs 
 
